@@ -86,13 +86,13 @@ const CollapsibleSidebar = () => {
     <SidebarNavLink
       to="/"
       icon={<LayoutDashboard className="h-6 w-6" />}
-      label="Resumen"
+      label="Dashboard"
       isCollapsed={isCollapsed}
     />
     <SidebarNavLink
       to="/maritime-dashboard"
       icon={<Ship className="h-6 w-6" />}
-      label="Dashboard Marítimo"
+      label="Mapa Marítimo"
       isCollapsed={isCollapsed}
     />
     <SidebarNavLink

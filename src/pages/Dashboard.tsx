@@ -39,7 +39,7 @@ const DashboardStatCard = ({ title, value, subStats, valueColor = 'text-gray-900
 const Dashboard = () => {
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Panel de Control</h1>
+      <h1 className="text-3xl font-bold">Dashboard</h1>
       
       <div>
         <h2 className="text-xl font-semibold mb-4">Resumen</h2>
