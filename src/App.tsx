@@ -11,6 +11,7 @@ import ContainerTracking from "./pages/ContainerTracking";
 import ApprovalQueue from "./pages/ApprovalQueue";
 import MaritimeDashboard from "./pages/MaritimeDashboard";
 import AdminPanel from "./pages/AdminPanel";
+import DatosApi from "./pages/DatosApi";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/container-tracking" element={<ContainerTracking />} />
             <Route path="/approval-queue" element={<ApprovalQueue />} />
             <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/datos-api" element={<DatosApi />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -6,6 +6,7 @@ import type { VesselInfo } from '@/data/containerEvents';
 interface ClientOnlyMapProps {
   position: [number, number];
   vesselInfo: VesselInfo;
+  onVesselClick: (vesselInfo: VesselInfo) => void;
 }
 
 const ClientOnlyMap = (props: ClientOnlyMapProps) => {
@@ -19,6 +20,7 @@ const ClientOnlyMap = (props: ClientOnlyMapProps) => {
     return <Skeleton className="h-full w-full" />;
   }
 
+  // Delegar a ContainerMap, pasando todos los props
   return <ContainerMap {...props} />;
 };
 

@@ -37,69 +37,60 @@ const VesselDetailPanel = ({ vesselInfo, onClose }: VesselDetailPanelProps) => {
       <CardContent className="flex-1 overflow-y-auto p-0">
         <div className="font-sans text-sm bg-white rounded-md overflow-hidden">
           <div className="p-3 bg-gray-50 border-b">
-            <h3 className="font-bold text-base text-gray-800">🇺🇸 {vesselInfo.vessel_name}</h3>
-            <p className="text-xs text-gray-500">{vesselInfo.vessel_type}</p>
+            <h3 className="font-bold text-base text-gray-800">{vesselInfo.nombre_buque}</h3>
+            <p className="text-xs text-gray-500">{vesselInfo.tipo_buque}</p>
           </div>
-          <img src={vesselInfo.imageUrl} alt={vesselInfo.vessel_name} className="w-full h-auto" />
-          
+          <img src={vesselInfo.imagen} alt={vesselInfo.nombre_buque} className="w-full h-auto" />
+
           <Tabs defaultValue="details" className="w-full">
             <TabsList className="grid w-full grid-cols-4 h-auto rounded-none">
-              <TabsTrigger value="details" className="flex flex-col h-auto py-1.5"><Info className="h-4 w-4 mb-1"/>Details</TabsTrigger>
-              <TabsTrigger value="track" className="flex flex-col h-auto py-1.5"><Map className="h-4 w-4 mb-1"/>Track</TabsTrigger>
-              <TabsTrigger value="photo" className="flex flex-col h-auto py-1.5"><Camera className="h-4 w-4 mb-1"/>Add photo</TabsTrigger>
-              <TabsTrigger value="fleet" className="flex flex-col h-auto py-1.5"><Star className="h-4 w-4 mb-1"/>Add to fleet</TabsTrigger>
+              <TabsTrigger value="details" className="flex flex-col h-auto py-1.5"><Info className="h-4 w-4 mb-1"/>Detalles</TabsTrigger>
+              <TabsTrigger value="track" className="flex flex-col h-auto py-1.5"><Map className="h-4 w-4 mb-1"/>Rastreo</TabsTrigger>
+              <TabsTrigger value="photo" className="flex flex-col h-auto py-1.5"><Camera className="h-4 w-4 mb-1"/>Foto</TabsTrigger>
+              <TabsTrigger value="fleet" className="flex flex-col h-auto py-1.5"><Star className="h-4 w-4 mb-1"/>Flota</TabsTrigger>
             </TabsList>
             <TabsContent value="details" className="p-3">
               <div className="mb-3">
-                <div className="text-xs text-gray-500 mb-1">Destination</div>
+                <div className="text-xs text-gray-500 mb-1">Destino</div>
                 <div className="font-semibold text-gray-800 flex items-center">
-                  <span className="mr-2 text-lg">🇺🇸</span>
+                  <span className="mr-2 text-lg">{vesselInfo.destino}</span>
                   <div>
-                    <div>{vesselInfo.destination}</div>
+                    <div>{vesselInfo.destino}</div>
                     <div className="font-bold text-blue-600">ETA: {vesselInfo.eta}</div>
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-xs mb-3">
-                <DetailItem label="Speed" value={vesselInfo.speed} />
-                <DetailItem label="Course" value={vesselInfo.course} />
-                <DetailItem label="Draught" value={vesselInfo.draught} />
+                <DetailItem label="Velocidad" value={vesselInfo.velocidad} />
+                <DetailItem label="Rumbo" value={vesselInfo.rumbo} />
+                <DetailItem label="Calado" value={vesselInfo.calado} />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                <DetailItem label="Status" value={vesselInfo.status} />
-                <DetailItem label="Last report" value={vesselInfo.lastReport} />
+                <DetailItem label="Estado de navegación" value={vesselInfo.estado_navegacion} />
+                <DetailItem label="Último reporte" value={vesselInfo.ultimo_reporte} />
               </div>
 
               <div className="border-t my-2"></div>
 
-              <div className="text-xs text-gray-500 mb-1">Last Port</div>
+              <div className="text-xs text-gray-500 mb-1">Puerto de origen</div>
               <div className="font-semibold text-gray-800 flex items-center">
-                <span className="mr-2 text-lg">🇸🇪</span>
-                <div>
-                  <div>{vesselInfo.lastPort}</div>
-                  <div className="font-normal">ATD: {vesselInfo.atd}</div>
-                </div>
+                <span className="mr-2 text-lg">{vesselInfo.puerto_origen}</span>
               </div>
 
               <Accordion type="single" collapsible className="w-full mt-2">
-                <AccordionItem value="port-calls">
-                  <AccordionTrigger>Port Calls</AccordionTrigger>
-                  <AccordionContent>
-                    No port call data available.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="weather">
-                  <AccordionTrigger>Weather</AccordionTrigger>
-                  <AccordionContent>
-                    Weather data is not available.
-                  </AccordionContent>
-                </AccordionItem>
                 <AccordionItem value="vessel-particulars">
-                  <AccordionTrigger>Vessel Particulars</AccordionTrigger>
+                  <AccordionTrigger>Particulares del Buque</AccordionTrigger>
                   <AccordionContent>
-                    <VesselParticulars vesselInfo={vesselInfo} />
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm p-4">
+                      <DetailItem label="Tonelaje bruto" value={vesselInfo.tonelaje_bruto} />
+                      <DetailItem label="Peso muerto" value={vesselInfo.peso_muerto} />
+                      <DetailItem label="Año de construcción" value={vesselInfo.construido} />
+                      <DetailItem label="Dimensiones" value={vesselInfo.dimensiones} />
+                      <DetailItem label="IMO" value={vesselInfo.imo} />
+                      <DetailItem label="MMSI" value={vesselInfo.mmsi} />
+                    </div>
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
