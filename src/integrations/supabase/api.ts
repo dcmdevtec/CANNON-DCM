@@ -38,21 +38,13 @@ export async function saveContainerInfo(data: any) {
 }
 
 export async function saveVesselPosition(data: any) {
-  const { error } = await supabase.from("cnn_vessel_position").insert([
-    {
-      vessel_name: data.vessel_name,
-      mmsi: data.mmsi,
-      imo: data.imo,
-      lat: data.lat,
-      lon: data.lon,
-      navigation_status: data.navigation_status,
-      last_position_utc: data.last_position_utc,
-      eta_utc: data.eta_utc,
-      last_updated: data.last_updated,
-    },
-  ]);
+  const { error } = await supabase
+    .from("cnn_vessel_position")
+    .insert([data]);
+
   return error;
 }
+
 
 export async function saveVesselIncident(data: any) {
   const { error } = await supabase.from("cnn_vessel_incident").insert([

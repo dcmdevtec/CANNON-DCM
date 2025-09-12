@@ -1,3 +1,15 @@
+// Helper para mapear claves a minúsculas
+function mapKeysToLower(obj: any) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const mapped: any = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      mapped[key.toLowerCase()] = obj[key];
+    }
+  }
+  return mapped;
+}
+
 // Consulta la API finder para obtener el IMO y luego la API basic para obtener la posición
 export async function fetchVesselFullData(vesselName: string) {
   const apiKey = "oeFyUMWVcqNH_hL9vAmqFbTbrFMIvKKhV8g7fSfttic";
@@ -14,7 +26,7 @@ export async function fetchVesselFullData(vesselName: string) {
   const vesselInfo = finderJson.data && finderJson.data.length > 0 ? finderJson.data[0] : null;
   if (!vesselInfo || !vesselInfo.imo) throw new Error('No IMO found for vessel');
   // 2. Consultar la API basic con el IMO
-  const basicUrl = `/api/v1/vessel/basic?imo=${vesselInfo.imo}`;
+  const basicUrl = `/api/v1/vessel/pro?imo=${vesselInfo.imo}`;
   const basicRes = await fetch(basicUrl, {
     method: 'GET',
     headers: {
@@ -25,13 +37,7 @@ export async function fetchVesselFullData(vesselName: string) {
   const basicJson = await basicRes.json();
   // Mapear claves para coincidir con la tabla (minúsculas)
   const basicData = basicJson.data || {};
-  const mappedBasic = {
-    ...basicData,
-    last_position_utc: basicData.last_position_UTC,
-    eta_utc: basicData.eta_UTC,
-  };
-  delete mappedBasic.last_position_UTC;
-  delete mappedBasic.eta_UTC;
+  const mappedBasic = mapKeysToLower(basicData);
   // Retornar ambos datos combinados
   return {
     finder: vesselInfo,
