@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import ExcelUploadModal from "@/components/ExcelUploadModal";
+// import ExcelUploadModal from "@/components/ExcelUploadModal";
 import { fetchContainerFromJsonCargo } from "@/api/jsoncargo";
 import {  fetchVesselFullData } from "@/api/jsoncargoVessel";
 import {
@@ -48,7 +48,7 @@ const ContainerTracking = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState("Todos");
-  const [excelModalOpen, setExcelModalOpen] = useState(false);
+  // const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [containerInput, setContainerInput] = useState("");
   const [navieraInput, setNavieraInput] = useState("");
   const [consulting, setConsulting] = useState(false);
@@ -107,9 +107,6 @@ const ContainerTracking = () => {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold">Seguimiento de Contenedores</h1>
-        <Button variant="outline" onClick={() => setExcelModalOpen(true)}>
-          Subir Excel
-        </Button>
       </div>
       {/* Buscador de la tabla */}
       <div className="flex items-center gap-4 mb-2">
@@ -304,16 +301,7 @@ const ContainerTracking = () => {
         </Table>
         )}
       </div>
-      {/* Modal para subir Excel */}
-      <ExcelUploadModal
-        open={excelModalOpen}
-        onClose={() => setExcelModalOpen(false)}
-        onSuccess={async () => {
-          // Recargar tabla al subir exitosamente
-          const { data } = await supabase.from("v_tracking_contenedor_completo").select("*");
-          setContainerRows(data || []);
-        }}
-      />
+  {/* El modal de ExcelUpload se ha removido por requerimiento */}
     </div>
   );
 };

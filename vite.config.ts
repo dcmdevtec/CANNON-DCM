@@ -7,29 +7,17 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 8080,
     proxy: {
-      // Proxy actual para api.jsoncargo.com
       "/api": {
         target: "http://api.jsoncargo.com",
         changeOrigin: true,
         secure: false,
+        // ELIMINA esta línea que está causando el problema:
+        // rewrite: (path) => path.replace(/^\/api/, ""),
         configure: (proxy, options) => {
-          proxy.on("proxyReq", (proxyReq, req, res) => {
-            console.log(
-              "Proxying request:",
-              req.method,
-              req.url,
-              "->",
-              proxyReq.path
-            );
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('Proxying request:', req.method, req.url, '->', proxyReq.path);
           });
-        },
-      },
-      // Proxy para GeoNames
-      "/geonames": {
-        target: "http://api.geonames.org",
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path.replace(/^\/geonames/, ""),
+        }
       },
     },
   },
