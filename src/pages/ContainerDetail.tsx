@@ -1,621 +1,365 @@
-"use client"
+import React, { useEffect, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { fetchContainerTrackingDetail } from '../api/fetchContainerTrackingDetail';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import ReactCountryFlag from 'react-country-flag';
+import { getName } from 'country-list';
 
-import { useEffect } from "react"
-import { useState } from "react"
-import type React from "react"
-import { useParams, Link } from "react-router-dom"
-import { ArrowLeft, ShipIcon, ArrowRight, MapPin, Clock, Anchor, Navigation, Gauge } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import IntelligentAgent from "@/components/IntelligentAgent"
-import ClientOnlyMap from "@/components/ClientOnlyMap"
-import ReactCountryFlag from "react-country-flag"
-import { getName } from "country-list"
-import VesselDetailPanel from "@/components/VesselDetailPanel"
-import { supabase } from "@/integrations/supabase/client"
-import { detectVesselArrival } from "@/utils/vessel-arrival-detection"
-
-const InfoCard = ({ title, value, children }: { title: string; value: string; children?: React.ReactNode }) => (
-  <Card className="flex-1 min-w-[180px] border-l-4 border-l-primary shadow-sm hover:shadow-md transition-shadow">
-    <CardHeader className="pb-2">
-      <p className="text-sm text-muted-foreground font-medium">{title}</p>
-    </CardHeader>
-    <CardContent>
-      <p className="text-lg font-semibold text-gray-900">{value}</p>
-      {children}
-    </CardContent>
-  </Card>
-)
-
-const VesselInfoCard = ({ vesselInfo, container }: { vesselInfo: any; container: any }) => {
-  const atdOrigin = container.atd_origin ? new Date(container.atd_origin).toLocaleDateString() : "-"
-  const etaFinal = container.eta ? new Date(container.eta).toLocaleDateString() : "-"
-  const etd = container.eta ? new Date(container.etd).toLocaleDateString() : "-"
-  const getIsoFromLocode = (locode: string) => {
-    if (!locode || locode.length < 2) return ""
-    const isoStart = locode.substring(0, 2).toUpperCase()
-    const isoEnd = locode.substring(locode.length - 2).toUpperCase()
-    return /^[A-Z]{2}$/.test(isoStart) ? isoStart : /^[A-Z]{2}$/.test(isoEnd) ? isoEnd : ""
-  }
-
-  const origin = container?.shipped_from || "-"
-  const originIso = getIsoFromLocode(origin.split(",").pop()?.trim() || "")
-  const originDate = container?.atd_last_location ? new Date(container.atd_last_location).toLocaleDateString() : "-"
-  const destination = container?.shipped_to || "-"
-  const destIso = getIsoFromLocode(destination.split(",").pop()?.trim() || "")
-  const destDate = container?.eta_final_destination
-    ? new Date(container.eta_final_destination).toLocaleDateString()
-    : "-"
-  const countryIso = vesselInfo.country_iso || vesselInfo.flag || ""
-  const [destPlace, setDestPlace] = useState<string>("")
+const ContainerDetail: React.FC = () => {
+  const { containerNumber } = useParams<{ containerNumber: string }>();
+  const [trackingData, setTrackingData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchPlace() {
-      if (vesselInfo.lat && vesselInfo.lon) {
-        try {
-          const res = await fetch(
-            `/geonames/oceanJSON?lat=${vesselInfo.lat}&lng=${vesselInfo.lon}&username=${import.meta.env.VITE_GEONAMES_USER}`,
-          )
-          const json = await res.json()
-
-          if (json?.ocean) {
-            setDestPlace(json.ocean.name || "Océano")
-          } else {
-            const nomRes = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${vesselInfo.lat}&lon=${vesselInfo.lon}`,
-            )
-            const nomJson = await nomRes.json()
-            setDestPlace(
-              nomJson.address?.city ||
-                nomJson.address?.town ||
-                nomJson.address?.village ||
-                nomJson.display_name ||
-                "Ubicación desconocida",
-            )
-          }
-        } catch (err) {
-          setDestPlace("Error obteniendo ubicación")
-        }
-      }
-    }
-    fetchPlace()
-  }, [vesselInfo.lat, vesselInfo.lon])
-
-  return (
-    <Card className="shadow-lg border-0 bg-gradient-to-br from-slate-50 to-white">
-      <CardHeader className="bg-gradient-to-r from-gray-900 to-blue-700 text-white rounded-t-lg">
-        <CardTitle className="flex items-center text-lg font-semibold">
-          <ShipIcon className="h-6 w-6 mr-3" />
-          Información del Buque
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-6">
-        <div className="bg-white rounded-xl p-4 mb-6 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {originIso && (
-                <div className="flex items-center gap-2 bg-green-50 px-3 py-2 rounded-lg">
-                  <ReactCountryFlag
-                    countryCode={originIso}
-                    svg
-                    style={{ width: "1.5em", height: "1.2em" }}
-                    title={originIso}
-                  />
-                  <div>
-                    <div className="font-semibold text-gray-900 text-sm">{origin}</div>
-                    <div className="text-xs text-green-600 font-medium">
-                      {originDate !== "-" && `Salida: ${originDate}`}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center px-4">
-              <div className="flex items-center">
-                <div className="h-0.5 w-12 bg-gradient-to-r from-primary/40 to-primary"></div>
-                <ArrowRight className="h-5 w-5 text-primary ml-1" />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {destIso && (
-                <div className="flex items-center gap-2 bg-primary/5 px-3 py-2 rounded-lg">
-                  <ReactCountryFlag
-                    countryCode={destIso}
-                    svg
-                    style={{ width: "1.5em", height: "1.2em" }}
-                    title={destIso}
-                  />
-                  <div>
-                    <div className="font-semibold text-gray-900 text-sm">{destination}</div>
-                    <div className="text-xs text-primary font-medium">{destDate !== "-" && `Llegada: ${destDate}`}</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Anchor className="h-4 w-4 text-primary" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-600">IMO:</span>
-                <span className="font-semibold text-gray-900 ml-2">
-                  {vesselInfo.imo || vesselInfo.last_voyage_number || vesselInfo.current_voyage_number || "-"}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Navigation className="h-4 w-4 text-primary" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-600">MMSI:</span>
-                <span className="font-semibold text-gray-900 ml-2">{vesselInfo.mmsi || "-"}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <ShipIcon className="h-4 w-4 text-primary" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-600">Tipo:</span>
-                <span className="font-semibold text-gray-900 ml-2">
-                  {vesselInfo.type || vesselInfo.type_specific || vesselInfo.container_type || "-"}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Gauge className="h-4 w-4 text-green-600" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-600">Velocidad:</span>
-                <span className="font-semibold text-gray-900 ml-2">
-                  {vesselInfo.speed ? vesselInfo.speed + " kn" : vesselInfo.velocidad || "-"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Clock className="h-4 w-4 text-green-600" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-600">ATD (Salida):</span>
-                <span className="font-semibold text-gray-900 ml-2">{atdOrigin}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Clock className="h-4 w-4 text-primary" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-600">ETA (Llegada):</span>
-                <span className="font-semibold text-gray-900 ml-2">{etaFinal}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Navigation className="h-4 w-4 text-purple-600" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-600">Rumbo:</span>
-                <span className="font-semibold text-gray-900 ml-2">
-                  {vesselInfo.course ? vesselInfo.course + "°" : vesselInfo.rumbo || "-"}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <MapPin className="h-4 w-4 text-red-600" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-600">Ubicación:</span>
-                <span className="font-semibold text-gray-900 ml-2">{destPlace || "-"}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 p-4 bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg border border-primary/20">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Estado:</span>
-              <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                {vesselInfo.navigation_status || vesselInfo.estado_navegacion || "En tránsito"}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Último reporte:</span>
-              <span className="text-sm font-medium text-gray-900">
-                {vesselInfo.last_position_UTC
-                  ? vesselInfo.last_position_UTC.split("T")[0]
-                  : vesselInfo.ultimo_reporte || "-"}
-              </span>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-const ContainerDetail = () => {
-  const { containerId } = useParams()
-  const [selectedVessel, setSelectedVessel] = useState<any | null>(null)
-  const [container, setContainer] = useState<any | null>(null)
-  const [vesselData, setVesselData] = useState<any | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [arrivalStatus, setArrivalStatus] = useState<any>(null)
-
-  useEffect(() => {
-    const fetchContainer = async () => {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from("v_tracking_contenedor_completo")
-        .select("*")
-        .eq("num_contenedor", containerId)
-        .single()
-      setContainer(data)
-      if (data && data.imo) {
-        const { data: vessel, error: vesselError } = await supabase
-          .from("cnn_vessel_position")
-          .select("*")
-          .eq("imo", data.imo)
-          .single()
-        setVesselData(vessel || null)
-        if (vessel) {
-          const arrival = detectVesselArrival(vessel)
-          setArrivalStatus(arrival)
-        }
-      } else {
-        setVesselData(null)
-      }
-      setLoading(false)
-    }
-    fetchContainer()
-  }, [containerId])
+    if (!containerNumber) return;
+    const cleanContainerNumber = decodeURIComponent(containerNumber).trim();
+    setLoading(true);
+    fetchContainerTrackingDetail(cleanContainerNumber)
+      .then((data) => {
+        setTrackingData(data);
+      })
+      .finally(() => setLoading(false));
+  }, [containerNumber]);
 
   if (loading) {
-    return <div>Cargando...</div>
+    return <div className="p-8 text-center">Cargando detalles del contenedor...</div>;
   }
 
-  if (!container) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-        <div className="container mx-auto px-4 py-6 space-y-6 relative">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <Link
-              to="/container-tracking"
-              className="inline-flex items-center text-sm text-primary hover:text-primary/80 font-medium mb-4 transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Volver a la lista
-            </Link>
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <ShipIcon className="h-8 w-8 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Contenedor No: {containerId}</h1>
-                <p className="text-gray-600 mt-1">Seguimiento en tiempo real</p>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InfoCard title="Conocimiento de Embarque" value={container.proveedor || "-"} />
-            <InfoCard title="Transportista" value={container.shipping_line_name || container.naviera || "-"} />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <div className="lg:col-span-3 space-y-6">
-              <Card className="h-80 relative z-0 shadow-lg border-0 overflow-hidden">
-                <CardContent className="h-full p-0"></CardContent>
-              </Card>
-              <VesselInfoCard vesselInfo={vesselData || container} container={container} />
-              <IntelligentAgent />
-            </div>
-          </div>
-        </div>
-      </div>
-    )
+  if (!trackingData || !trackingData.tracking) {
+    return <div className="p-8 text-center">No se encontraron datos para este contenedor.</div>;
   }
 
-  const handleVesselClick = (vesselInfo: any) => {
-    const fetchVessel = async () => {
-      const { data, error } = await supabase.from("cnn_vessel_position").select("*").eq("imo", vesselInfo.imo).single()
-      if (data) {
-        setSelectedVessel({
-          nombre_buque: data.name || "-",
-          tipo_buque: data.type || data.type_specific || "-",
-          imo: data.imo || "-",
-          mmsi: data.mmsi || "-",
-          destino: data.destination || "-",
-          eta: data.eta_UTC ? data.eta_UTC.split("T")[0] : "-",
-          velocidad: data.speed ? data.speed.toString() + " nudos" : "-",
-          rumbo: data.course ? data.course.toString() + "°" : "-",
-          calado: data.draught_max ? data.draught_max.toString() + " m" : "-",
-          estado_navegacion: data.navigation_status || "-",
-          ultimo_reporte: data.last_position_UTC ? data.last_position_UTC.split("T")[0] : "-",
-          puerto_origen: data.home_port || "-",
-          tonelaje_bruto: data.gross_tonnage ? data.gross_tonnage.toString() : "-",
-          peso_muerto: data.deadweight ? data.deadweight.toString() : "-",
-          construido: data.year_built || "-",
-          dimensiones: data.length && data.breadth ? `${data.length} / ${data.breadth} m` : "-",
-          imagen: "/vessel.jpg",
-        })
-      } else {
-        setSelectedVessel(null)
-      }
-    }
-    fetchVessel()
-  }
-
-  const handleClosePanel = () => {
-    setSelectedVessel(null)
-  }
+  const { tracking, events } = trackingData;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="container mx-auto px-4 py-6 space-y-6 relative">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <Link
-            to="/container-tracking"
-            className="inline-flex items-center text-sm text-primary hover:text-primary/80 font-medium mb-4 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Volver a la lista
-          </Link>
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <ShipIcon className="h-8 w-8 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Contenedor No: {container.container_id}</h1>
-              <p className="text-gray-600 mt-1">Seguimiento en tiempo real</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <InfoCard title="Proveedor" value={container.proveedor || "-"} />
-          <InfoCard title="Transportista" value={container.shipping_line_name || container.naviera || "-"} />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-3 space-y-6">
-            <Card className="h-80 relative z-0 shadow-lg border-0 overflow-hidden">
-              <CardContent className="h-full p-0">
-                <ClientOnlyMap
-                  position={container.lat && container.lon ? [container.lat, container.lon] : [0, 0]}
-                  vesselInfo={container}
-                  onVesselClick={handleVesselClick}
-                />
-              </CardContent>
-            </Card>
-            <VesselInfoCard vesselInfo={vesselData || container} container={container} />
-            <IntelligentAgent />
-          </div>
-
-          <div className="lg:col-span-2">
-            {!selectedVessel ? (
-              <Card className="shadow-xl border-0 bg-white overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-primary to-primary/80 text-white p-6">
-                  <CardTitle className="text-xl font-semibold">Ruta del Contenedor</CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  {/* Destination Section - Destino debe estar verde */}
-                  <div className="mb-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <span className="text-sm font-medium text-gray-600 uppercase tracking-wide">Destino</span>
-                    </div>
-                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
-                      <div className="flex items-center gap-3">
-                        {(() => {
-                          const getIsoFromLocode = (locode: string) => {
-                            if (!locode || locode.length < 2) return ""
-                            const isoStart = locode.substring(0, 2).toUpperCase()
-                            const isoEnd = locode.substring(locode.length - 2).toUpperCase()
-                            return /^[A-Z]{2}$/.test(isoStart) ? isoStart : /^[A-Z]{2}$/.test(isoEnd) ? isoEnd : ""
+      <div className="container mx-auto px-4 py-6 space-y-6 relative grid grid-cols-1 lg:grid-cols-7 gap-8">
+        {/* Timeline principal */}
+        <div className="lg:col-span-5">
+          <Card className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-muted-foreground font-medium">Container</span>
+                <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  {tracking.container_number}
+                  <Badge variant="secondary" className="ml-2">{tracking.container_type || '-'}</Badge>
+                </CardTitle>
+              </div>
+              <div className="flex flex-col gap-2 text-right">
+                <span className="text-xs text-muted-foreground font-medium">Latest move</span>
+                <span className="font-semibold text-lg text-gray-900 flex items-center gap-2">
+                  {tracking.latest_move || '-'}
+                </span>
+                <span className="text-xs text-muted-foreground font-medium mt-2">POD ETA</span>
+                <span className="font-semibold text-lg text-gray-900 flex items-center gap-2">
+                  {tracking.pod_eta_date || '-'}
+                </span>
+              </div>
+            </CardHeader>
+            {/* Eventos */}
+            <CardContent>
+              <div className="relative">
+                {Array.isArray(events) && events.length > 0 ? (
+                    (() => {
+                      const sortedEvents = [...events]
+                        .filter(e => e.event_date)
+                        .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+                      
+                      // Agregar evento de destino final si tenemos ETA
+                      const eventsWithETA = [...sortedEvents];
+                      if (tracking?.pod_eta_date && tracking?.shipped_to) {
+                        eventsWithETA.unshift({
+                          id: 'eta-destination',
+                          event_date: tracking.pod_eta_date,
+                          location: tracking.shipped_to,
+                          description: 'Estimated Time of Arrival',
+                          isETA: true
+                        });
+                      }
+                      
+                      return eventsWithETA.map((event: any, idx: number, arr: any[]) => {
+                        const isFirst = idx === 0;
+                        const isLast = idx === arr.length - 1;
+                        const isETA = event.isETA;
+                        
+                        // Extraer país de location
+                        let countryCode = '';
+                        let locationDisplay = '';
+                        if (event.location) {
+                          const parts = event.location.split(',');
+                          const last = parts[parts.length - 1]?.trim();
+                          if (last && last.length === 2) {
+                            countryCode = last.toUpperCase();
+                            locationDisplay = event.location.replace(/,[^,]*$/, '').trim();
+                          } else {
+                            locationDisplay = event.location;
                           }
-                          let destIso = ""
-                          let countryName = ""
-                          if (vesselData?.destination) {
-                            const parts = vesselData.destination.split(",")
-                            const last = parts[parts.length - 1]?.trim()
-                            destIso = getIsoFromLocode(last || vesselData.destination)
-                            countryName = getName(destIso) || destIso
+                        }
+                        
+                        // Formato de fecha
+                        const dateStr = event.event_date ? new Date(event.event_date).toLocaleDateString('es-ES', { 
+                          day: '2-digit', 
+                          month: '2-digit', 
+                          year: 'numeric' 
+                        }) : '-';
+                        
+                        // Obtener datos del vessel desde vessel_data JSON
+                        let vesselInfo = null;
+                        if (event.vessel_data) {
+                          try {
+                            vesselInfo = JSON.parse(event.vessel_data);
+                          } catch (e) {
+                            vesselInfo = null;
                           }
-                          return destIso ? (
-                            <div className="flex items-center gap-3">
-                              <ReactCountryFlag
-                                countryCode={destIso}
-                                svg
-                                style={{ width: "2.5em", height: "2em" }}
-                                title={destIso}
-                              />
-                              <div>
-                                <div className="font-bold text-xl text-gray-900">{countryName}</div>
-                                <div className="font-semibold text-gray-700">{vesselData?.destination || "-"}</div>
+                        }
+                        
+                        // Estado del evento para colores - USAR event_description
+                        const description = event.event_description || event.event_type || '';
+                        const isDelivered = description.toLowerCase().includes('delivered') || description.toLowerCase().includes('entregado');
+                        const isInTransit = description.toLowerCase().includes('loaded') || description.toLowerCase().includes('discharged') || description.toLowerCase().includes('transshipment');
+                        const isEmpty = description.toLowerCase().includes('empty');
+                        const isReceived = description.toLowerCase().includes('received');
+                        
+                        return (
+                          <div key={event.id || idx} className={`relative border-b border-gray-100 hover:bg-blue-50/30 transition-colors ${isFirst && isETA ? 'bg-green-50/50' : isFirst ? 'bg-blue-50/50' : ''}`}>
+                            {/* Línea continua del timeline - CORREGIDA */}
+                            {!isLast && (
+                              <div className="absolute left-[50px] top-[72px] w-0.5 h-full bg-gradient-to-b from-blue-400 to-blue-300 z-0"></div>
+                            )}
+                            
+                            <div className="flex items-center px-6 py-5 relative z-10">
+                              {/* Timeline con círculo - MEJORADO */}
+                              <div className="w-20 flex justify-center">
+                                <div className={`w-10 h-10 rounded-full border-3 flex items-center justify-center shadow-lg ${
+                                  isETA ? 'border-green-500 bg-green-500' :
+                                  isFirst ? 'border-blue-500 bg-blue-500' : 
+                                  isDelivered ? 'border-green-500 bg-green-100' :
+                                  isInTransit ? 'border-orange-500 bg-orange-100' :
+                                  isReceived ? 'border-blue-400 bg-blue-100' :
+                                  isEmpty ? 'border-gray-400 bg-gray-100' :
+                                  isLast ? 'border-gray-400 bg-gray-200' :
+                                  'border-blue-300 bg-white'
+                                }`}>
+                                  {isETA ? (
+                                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                                    </svg>
+                                  ) : isFirst ? (
+                                    <div className="w-4 h-4 bg-white rounded-full animate-pulse"></div>
+                                  ) : isInTransit ? (
+                                    <svg className="w-5 h-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                                      <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
+                                    </svg>
+                                  ) : isReceived ? (
+                                    <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 1.414L10.586 9.5 9.293 8.207a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                                    </svg>
+                                  ) : isLast ? (
+                                    <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clipRule="evenodd"/>
+                                    </svg>
+                                  ) : (
+                                    <div className="w-3 h-3 bg-current rounded-full"></div>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* Fecha - MEJORADO */}
+                              <div className="w-28 pl-2">
+                                <div className="font-semibold text-gray-900 text-sm">{dateStr}</div>
+                                {event.event_time && (
+                                  <div className="text-xs text-gray-500 mt-1">{event.event_time}</div>
+                                )}
+                              </div>
+                              
+                              {/* Ubicación - MEJORADO */}
+                              <div className="w-48 pl-3">
+                                <div className="flex items-center gap-3">
+                                  {countryCode && (
+                                    <ReactCountryFlag 
+                                      countryCode={countryCode} 
+                                      svg 
+                                      style={{ width: '22px', height: '16px' }} 
+                                      title={countryCode} 
+                                    />
+                                  )}
+                                  <div>
+                                    <div className="font-medium text-gray-900 text-sm">
+                                      {locationDisplay || event.location || '-'}
+                                    </div>
+                                    {event.port && event.port !== locationDisplay && (
+                                      <div className="text-xs text-gray-500 mt-0.5">
+                                        {event.port}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Descripción - CORREGIDO */}
+                              <div className="flex-1 pl-4">
+                                <div className="font-medium text-gray-900 text-sm mb-1.5">
+                                  {event.description || 'Sin descripción'}
+                                </div>
+                                {/* Badges de estado */}
+                                <div className="flex gap-2">
+                                  {isETA && (
+                                    <Badge className="bg-green-100 text-green-800 border-green-200 text-xs px-2 py-1">
+                                      Destino Final
+                                    </Badge>
+                                  )}
+                                  {isDelivered && !isETA && (
+                                    <Badge className="bg-green-100 text-green-800 border-green-200 text-xs px-2 py-1">
+                                      Entregado
+                                    </Badge>
+                                  )}
+                                  {isInTransit && !isDelivered && !isETA && (
+                                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs px-2 py-1">
+                                      En tránsito
+                                    </Badge>
+                                  )}
+                                  {isEmpty && (
+                                    <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 text-xs px-2 py-1">
+                                      Vacío
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* Buque/Viaje - MEJORADO */}
+                              <div className="w-52 pl-4">
+                                {event.vessel_name ? (
+                                  <div>
+                                    <div className="font-medium text-blue-700 text-sm mb-0.5">
+                                      {event.vessel_name}
+                                    </div>
+                                    {event.vessel_voyage && (
+                                      <div className="text-xs text-gray-600">
+                                        Viaje: {event.vessel_voyage}
+                                      </div>
+                                    )}
+                                    {event.vessel_imo && (
+                                      <div className="text-xs text-gray-500">
+                                        IMO: {event.vessel_imo}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : isETA ? (
+                                  <div className="text-sm text-gray-400 italic">Estimado</div>
+                                ) : (
+                                  <div className="text-sm text-gray-400">-</div>
+                                )}
+                              </div>
+                              
+                              {/* Instalación - MEJORADO */}
+                              <div className="w-64 pl-4">
+                                {event.facility_name ? (
+                                  <div>
+                                    <div className="font-medium text-gray-900 text-sm mb-0.5">
+                                      {event.facility_name}
+                                    </div>
+                                    {event.terminal && event.terminal !== event.facility_name && (
+                                      <div className="text-xs text-gray-500">
+                                        {event.terminal}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : isETA ? (
+                                  <div className="text-sm text-gray-400 italic">Puerto de destino</div>
+                                ) : (
+                                  <div className="text-sm text-gray-400">-</div>
+                                )}
                               </div>
                             </div>
-                          ) : (
-                            <div className="font-bold text-xl text-gray-900">{vesselData?.destination || "-"}</div>
-                          )
-                        })()}
-                      </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-green-600" />
-                        <span className="text-sm font-medium text-green-700">
-                          ETA:{" "}
-                          {vesselData?.eta_utc
-                            ? new Date(vesselData.eta_utc).toLocaleDateString("es-ES") +
-                              ", " +
-                              new Date(vesselData.eta_utc).toLocaleTimeString("es-ES", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "-"}
-                        </span>
-                      </div>
+                          </div>
+                        );
+                      });
+                    })()
+                  ) : (
+                    <div className="px-8 py-12 text-center text-gray-400">
+                      <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2 2v-5m16 0h-2M4 13h2"/>
+                      </svg>
+                      <p>No hay eventos disponibles para este contenedor</p>
                     </div>
-                  </div>
-
-                  {/* Elegant Vertical Connection with Arrow - badge arriba, bolita verde arriba, línea hacia abajo */}
-                  <div className="relative my-8 flex flex-col items-center">
-                    {arrivalStatus?.hasArrived ? (
-                      <>
-                        {/* Badge arriba */}
-                        <Badge
-                          variant="default"
-                          className={`${
-                            arrivalStatus.confidence === "high"
-                              ? "bg-green-100 text-green-800 border-green-200"
-                              : arrivalStatus.confidence === "medium"
-                                ? "bg-yellow-100 text-yellow-800 border-yellow-200"
-                                : "bg-orange-100 text-orange-800 border-orange-200"
-                          } shadow-sm text-sm px-3 py-1 font-medium mb-4`}
-                        >
-                          ✓ Arribado ({arrivalStatus.confidence})
-                        </Badge>
-                        {/* Bolita verde arriba */}
-                        <div className="relative z-10 p-3 rounded-full bg-green-500 shadow-xl shadow-green-200 scale-110"></div>
-                        {/* Línea hacia abajo */}
-                        <div className="w-0.5 h-32 bg-gradient-to-b from-green-500 via-green-400 to-green-100"></div>
-                        {/* Punta final */}
-                        <div className="w-1 h-6 bg-gradient-to-b from-green-100 to-green-50"></div>
-                      </>
-                    ) : (
-                      <>
-                        {/* Badge en tránsito */}
-                        <Badge
-                          variant="default"
-                          className="bg-blue-100 text-blue-800 border-blue-200 shadow-sm text-sm px-3 py-1 font-medium mb-4"
-                        >
-                          🚢 En Tránsito
-                        </Badge>
-                        {/* Bolita azul pulsante */}
-                        <div className="relative z-10 p-3 rounded-full bg-blue-500 shadow-xl shadow-blue-200 scale-110 animate-pulse"></div>
-                        {/* Línea animada hacia abajo */}
-                        <div className="w-0.5 h-32 bg-gradient-to-b from-blue-500 via-blue-400 to-blue-100 animate-pulse"></div>
-                        {/* Punta final */}
-                        <div className="w-1 h-6 bg-gradient-to-b from-blue-100 to-blue-50"></div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Origin Section - Origen color neutro */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-3 h-3 bg-gray-300 rounded-full"></div>
-                      <span className="text-sm font-medium text-gray-600 uppercase tracking-wide">Origen</span>
-                    </div>
-                    <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
-                      <div className="flex items-center gap-3">
-                        {(() => {
-                          const getIsoFromLocode = (locode: string) => {
-                            if (!locode || locode.length < 2) return ""
-                            const isoStart = locode.substring(0, 2).toUpperCase()
-                            const isoEnd = locode.substring(locode.length - 2).toUpperCase()
-                            return /^[A-Z]{2}$/.test(isoStart) ? isoStart : /^[A-Z]{2}$/.test(isoEnd) ? isoEnd : ""
-                          }
-                          let originIso = ""
-                          let countryName = ""
-                          if (vesselData?.dep_port_unlocode) {
-                            const parts = vesselData.dep_port_unlocode.split(",")
-                            const last = parts[parts.length - 1]?.trim()
-                            originIso = getIsoFromLocode(last || vesselData.dep_port_unlocode)
-                            countryName = getName(originIso) || originIso
-                          }
-                          return originIso ? (
-                            <div className="flex items-center gap-3">
-                              <ReactCountryFlag
-                                countryCode={originIso}
-                                svg
-                                style={{ width: "2.5em", height: "2em" }}
-                                title={originIso}
-                              />
-                              <div>
-                                <div className="font-bold text-xl text-gray-900">{countryName}</div>
-                                <div className="font-semibold text-gray-700">{container?.dep_port || "-"}</div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="font-bold text-xl text-gray-900">{container?.dep_port || "-"}</div>
-                          )
-                        })()}
-                      </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm font-medium text-gray-700">
-                          ATD:{" "}
-                          {vesselData?.atd_utc
-                            ? new Date(vesselData.atd_utc).toLocaleDateString("es-ES") +
-                              " (" +
-                              Math.floor(
-                                (Date.now() - new Date(vesselData.atd_utc).getTime()) / (1000 * 60 * 60 * 24),
-                              ) +
-                              " días)"
-                            : "-"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Vessel Metrics */}
-                  <div className="grid grid-cols-1 gap-3 mt-3 mb-8">
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Gauge className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-gray-600">Velocidad:</span>
-                      </div>
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                        {vesselData?.speed ? vesselData.speed + " kn" : vesselData?.velocidad || "-"}
-                      </Badge>
-                    </div>
-
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Navigation className="h-4 w-4 text-primary" />
-                        <span className="text-sm text-gray-600">Rumbo:</span>
-                      </div>
-                      <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
-                        {vesselData?.course ? vesselData.course + "°" : vesselData?.rumbo || "-"}
-                      </Badge>
-                    </div>
-
-                    <div className="flex items-center justify-between  p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Anchor className="h-4 w-4 text-purple-600" />
-                        <span className="text-sm text-gray-600">Estado:</span>
-                      </div>
-                      <Badge
-                        className={`${
-                          arrivalStatus?.hasArrived
-                            ? arrivalStatus.confidence === "high"
-                              ? "bg-green-100 text-green-800 border-green-200"
-                              : arrivalStatus.confidence === "medium"
-                                ? "bg-yellow-100 text-yellow-800 border-yellow-200"
-                                : "bg-orange-100 text-orange-800 border-orange-200"
-                            : "bg-blue-100 text-blue-800 border-blue-200"
-                        }`}
-                      >
-                        {vesselData?.navigation_status || vesselData?.estado_navegacion || "En tránsito"}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
-          </div>
+                  )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        {selectedVessel && (
-          <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
-            <div className="bg-white rounded-lg shadow-2xl w-[400px] max-h-[90vh] overflow-y-auto">
-              <VesselDetailPanel vesselInfo={selectedVessel} onClose={handleClosePanel} />
-            </div>
-          </div>
-        )}
+        {/* Columna lateral con métricas y badges de estado */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Card de resumen de viaje */}
+          <Card className="shadow-xl border-0 bg-white overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-primary to-primary/80 text-white p-6">
+              <CardTitle className="text-xl font-semibold">Resumen del Viaje</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              {/* Estado dinámico */}
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm text-gray-600">Estado:</span>
+                {tracking?.current_status === 'Empty to Shipper' ? (
+                  <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Vacío</Badge>
+                ) : tracking?.current_status === 'In Transit' ? (
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200">En tránsito</Badge>
+                ) : tracking?.current_status === 'Delivered' ? (
+                  <Badge className="bg-green-100 text-green-800 border-green-200">Entregado</Badge>
+                ) : (
+                  <Badge className="bg-gray-100 text-gray-800 border-gray-200">{tracking?.current_status || '-'}</Badge>
+                )}
+              </div>
+              {/* País de origen y destino */}
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-sm text-gray-600">Origen:</span>
+                {tracking?.origin_country && (
+                  <ReactCountryFlag countryCode={tracking.origin_country} svg style={{ width: '1.5em', height: '1.2em' }} title={tracking.origin_country} />
+                )}
+                <span className="font-medium text-gray-900">{tracking?.shipped_from || '-'}</span>
+              </div>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-sm text-gray-600">Destino:</span>
+                {tracking?.destination_country && (
+                  <ReactCountryFlag countryCode={tracking.destination_country} svg style={{ width: '1.5em', height: '1.2em' }} title={tracking.destination_country} />
+                )}
+                <span className="font-medium text-gray-900">{tracking?.shipped_to || '-'}</span>
+              </div>
+              {/* Fechas clave */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">ETA (Arribo estimado)</span>
+                <span className="text-sm font-medium text-gray-900">{tracking?.pod_eta_date || tracking?.eta || '-'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Primer evento</span>
+                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.first_event_date || '-'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Último evento</span>
+                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.last_event_date || '-'}</span>
+              </div>
+              {/* Métricas */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Total eventos</span>
+                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.total_events || 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Puertos</span>
+                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.total_ports || 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Transbordos</span>
+                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.transhipment_count || 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Buques</span>
+                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.total_vessels || 0}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default ContainerDetail
+export default ContainerDetail;

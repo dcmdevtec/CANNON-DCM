@@ -25,7 +25,7 @@ const App = () => (
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/maritime-dashboard" element={<MaritimeDashboard />} />
-            <Route path="/container/:containerId" element={<ContainerDetail />} />
+            <Route path="/container-detail/:containerNumber" element={<ContainerDetail />} />
             <Route path="/container-tracking" element={<ContainerTracking />} />
             <Route path="/approval-queue" element={<ApprovalQueue />} />
             <Route path="/admin" element={<AdminPanel />} />
