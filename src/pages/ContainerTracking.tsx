@@ -96,7 +96,7 @@ const ContainerTracking = () => {
               <TableHead className="text-[#6b7280] font-bold">ETA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">LLEGADA A BARRANQUILLA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">FACTURA</TableHead>
-              <TableHead className="text-[#6b7280] font-bold">ESTADO</TableHead>
+             
               <TableHead className="text-[#6b7280] font-bold">NAVIERA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">ACCIÓN</TableHead>
             </TableRow>
@@ -127,7 +127,7 @@ const ContainerTracking = () => {
                   </div>
                 </TableCell>
                 <TableCell>{row.factura}</TableCell>
-                <TableCell>{row.estado}</TableCell>
+                
                 <TableCell>{row.naviera}</TableCell>
                 <TableCell>
                   <span className="inline-flex gap-2">
