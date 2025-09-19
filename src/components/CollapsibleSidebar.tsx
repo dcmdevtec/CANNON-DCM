@@ -90,12 +90,7 @@ const CollapsibleSidebar = () => {
       label="Dashboard"
       isCollapsed={isCollapsed}
     />
-    <SidebarNavLink
-      to="/maritime-dashboard"
-      icon={<Ship className="h-6 w-6" />}
-      label="Mapa Marítimo"
-      isCollapsed={isCollapsed}
-    />
+   
     <SidebarNavLink
       to="/container-tracking"
       icon={<Anchor className="h-6 w-6" />}

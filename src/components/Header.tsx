@@ -27,23 +27,7 @@ const NotificationIcon = ({ severity }: { severity: string }) => {
 const Header = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(10);
-
-      if (error) {
-        console.error("Error fetching notifications:", error);
-      } else {
-        setNotifications(data as Notification[]);
-      }
-    };
-
-    fetchNotifications();
-  }, []);
+ 
 
   return (
     <header className="h-16 flex items-center justify-end px-8 bg-white border-b">
@@ -57,7 +41,7 @@ const Header = () => {
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
               </span>
             )}
-            <span className="sr-only">Abrir notificaciones</span>
+            <span className="sr-only">Abrir es</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-80 mr-4">

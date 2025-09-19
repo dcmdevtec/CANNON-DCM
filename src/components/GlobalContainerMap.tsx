@@ -24,13 +24,6 @@ type TrackingData = {
   port_of_load: string | null;
 };
 
-const mockVessels: TrackingData[] = [
-  { id: 'mock-1', latitude: 34.0522, longitude: -118.2437, vessel_name: 'Mock Maersk', vessel_type: 'Container Ship', vessel_imo: '9876543', vessel_image_url: '/vessel.jpg', shipped_to: 'Port of Los Angeles', pod_eta_date: '2025-08-20', current_status: 'In Transit', updated_at: new Date().toISOString(), port_of_load: 'Port of Shanghai' },
-  { id: 'mock-2', latitude: 40.7128, longitude: -74.0060, vessel_name: 'Mock MSC', vessel_type: 'Container Ship', vessel_imo: '9876544', vessel_image_url: '/vessel.jpg', shipped_to: 'Port of New York', pod_eta_date: '2025-08-22', current_status: 'In Transit', updated_at: new Date().toISOString(), port_of_load: 'Port of Rotterdam' },
-  { id: 'mock-3', latitude: 4.5709, longitude: -74.2973, vessel_name: 'Mock CMA CGM', vessel_type: 'Container Ship', vessel_imo: '9876545', vessel_image_url: '/vessel.jpg', shipped_to: 'Port of Cartagena', pod_eta_date: '2025-08-18', current_status: 'At Port', updated_at: new Date().toISOString(), port_of_load: 'Port of Singapore' },
-  { id: 'mock-4', latitude: 51.5072, longitude: -0.1276, vessel_name: 'Mock Hapag-Lloyd', vessel_type: 'Container Ship', vessel_imo: '9876546', vessel_image_url: '/vessel.jpg', shipped_to: 'Port of London', pod_eta_date: '2025-08-25', current_status: 'In Transit', updated_at: new Date().toISOString(), port_of_load: 'Port of Hamburg' },
-];
-
 const GlobalContainerMap = () => {
   const [isClient, setIsClient] = useState(false);
   const [trackings, setTrackings] = useState<TrackingData[]>([]);
@@ -53,11 +46,9 @@ const GlobalContainerMap = () => {
 
       if (error) {
         console.error("Error fetching trackings:", error);
-        setTrackings(mockVessels);
+        setTrackings([]); // Set to empty array on error
       } else {
-        const combined = [...(data as TrackingData[]), ...mockVessels];
-        const uniqueTrackings = Array.from(new Map(combined.map(item => [item.id, item])).values());
-        setTrackings(uniqueTrackings);
+        setTrackings(data as TrackingData[]); // Set directly from Supabase data
       }
       setLoading(false);
     };
