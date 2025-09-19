@@ -8,7 +8,8 @@ import { ArrowLeft, CheckCircle, Ship, ArrowRight, Anchor, Package, Circle, Cloc
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import VesselFinderEmbed from '@/components/vesselFinderEmbed';
+import VesselFinderEmbed from '@/components/VesselFinderEmbed';
+
 
 const ContainerDetail: React.FC = () => {
   const { containerNumber } = useParams<{ containerNumber: string }>();
