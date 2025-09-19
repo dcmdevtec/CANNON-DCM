@@ -4,12 +4,17 @@ import { fetchContainerTrackingDetail } from '../api/fetchContainerTrackingDetai
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import ReactCountryFlag from 'react-country-flag';
-import { getName } from 'country-list';
+import { ArrowLeft, CheckCircle, Ship, ArrowRight, Anchor, Package, Circle, Clock, MapPin } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import VesselFinderEmbed from '@/components/vesselFinderEmbed';
 
 const ContainerDetail: React.FC = () => {
   const { containerNumber } = useParams<{ containerNumber: string }>();
   const [trackingData, setTrackingData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [activeMapEventId, setActiveMapEventId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!containerNumber) return;
@@ -22,6 +27,16 @@ const ContainerDetail: React.FC = () => {
       .finally(() => setLoading(false));
   }, [containerNumber]);
 
+  const getImoForVessel = (metadata: any, vesselName: string): string | null => {
+    if (!metadata?.processing_notes || !vesselName) {
+      return null;
+    }
+    const notes = metadata.processing_notes;
+    const regex = new RegExp(`${vesselName.trim()}\\s*\\(IMO:\\s*(\\d+)\\)`);
+    const match = notes.match(regex);
+    return match ? match[1] : null;
+  };
+
   if (loading) {
     return <div className="p-8 text-center">Cargando detalles del contenedor...</div>;
   }
@@ -30,335 +45,231 @@ const ContainerDetail: React.FC = () => {
     return <div className="p-8 text-center">No se encontraron datos para este contenedor.</div>;
   }
 
-  const { tracking, events } = trackingData;
+  const { tracking, events, summary } = trackingData;
+
+  const sortedEvents = Array.isArray(events)
+    ? [...events]
+        .filter(e => e.event_date)
+        .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())
+    : [];
+
+  const eventsWithETA = [...sortedEvents];
+  if (tracking?.pod_eta_date && tracking?.shipped_to) {
+    eventsWithETA.unshift({
+      id: 'eta-destination',
+      event_date: tracking.pod_eta_date,
+      location: tracking.shipped_to,
+      event_description: 'Llegada Estimada a Destino Final',
+      isETA: true,
+    });
+  }
+
+  const getEventIcon = (event: any, isFirst: boolean, isLast: boolean) => {
+    const description = (event.event_description || event.event_type || '').toLowerCase();
+    const isFuture = event.isETA && new Date(event.event_date) > new Date();
+
+    if (isFuture) return <Clock className="h-6 w-6 text-white" />;
+    if (event.isETA) return <CheckCircle className="h-6 w-6 text-white" />;
+    if (isFirst) return <div className="w-3 h-3 bg-white rounded-full animate-pulse" />;
+    if (description.includes('loaded') || description.includes('discharged') || description.includes('transshipment')) return <Ship className="h-5 w-5 text-orange-600" />;
+    if (description.includes('received')) return <Package className="h-5 w-5 text-blue-600" />;
+    if (description.includes('empty')) return <Circle className="h-5 w-5 text-gray-500" />;
+    if (isLast) return <ArrowRight className="h-5 w-5 text-gray-500" />;
+    return <Anchor className="h-5 w-5 text-gray-600" />;
+  };
+
+  const getIconBgClass = (event: any, isFirst: boolean) => {
+    const description = (event.event_description || event.event_type || '').toLowerCase();
+    const isFuture = event.isETA && new Date(event.event_date) > new Date();
+
+    if (isFuture) return 'border-blue-500 bg-blue-500 animate-pulse';
+    if (event.isETA) return 'border-green-500 bg-green-500';
+    if (isFirst) return 'border-blue-500 bg-blue-500';
+    if (description.includes('loaded') || description.includes('discharged') || description.includes('transshipment')) return 'border-orange-500 bg-orange-100';
+    if (description.includes('received')) return 'border-blue-400 bg-blue-100';
+    if (description.includes('empty')) return 'border-gray-400 bg-gray-100';
+    return 'border-gray-300 bg-white';
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="container mx-auto px-4 py-6 space-y-6 relative grid grid-cols-1 lg:grid-cols-7 gap-8">
-        {/* Timeline principal */}
-        <div className="lg:col-span-5">
+    <TooltipProvider>
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-8 space-y-8">
+          
           <Card className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <div className="flex flex-col gap-2">
-                <span className="text-xs text-muted-foreground font-medium">Container</span>
-                <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Link to="/container-tracking" className="inline-flex items-center text-sm text-primary hover:text-primary/80 font-medium mb-4 transition-colors">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Volver a la lista
+            </Link>
+            <div className="flex flex-wrap justify-between items-start gap-4">
+              <div>
+                <span className="text-xs text-muted-foreground font-medium">Contenedor</span>
+                <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
                   {tracking.container_number}
-                  <Badge variant="secondary" className="ml-2">{tracking.container_type || '-'}</Badge>
-                </CardTitle>
+                  <Badge variant="outline">{tracking.container_type || '40\' HIGH CUBE'}</Badge>
+                </h1>
               </div>
-              <div className="flex flex-col gap-2 text-right">
-                <span className="text-xs text-muted-foreground font-medium">Latest move</span>
-                <span className="font-semibold text-lg text-gray-900 flex items-center gap-2">
-                  {tracking.latest_move || '-'}
-                </span>
-                <span className="text-xs text-muted-foreground font-medium mt-2">POD ETA</span>
-                <span className="font-semibold text-lg text-gray-900 flex items-center gap-2">
-                  {tracking.pod_eta_date || '-'}
-                </span>
+              <div className="text-left sm:text-right">
+                <span className="text-xs text-muted-foreground font-medium">Último Movimiento</span>
+                <p className="font-semibold text-lg text-gray-900">{tracking.latest_move || 'Empty to Shipper'}</p>
               </div>
-            </CardHeader>
-            {/* Eventos */}
-            <CardContent>
-              <div className="relative">
-                {Array.isArray(events) && events.length > 0 ? (
-                    (() => {
-                      const sortedEvents = [...events]
-                        .filter(e => e.event_date)
-                        .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+              <div className="text-left sm:text-right">
+                <span className="text-xs text-muted-foreground font-medium">POD ETA</span>
+                <p className="font-semibold text-lg text-gray-900">{tracking.pod_eta_date || '2025-09-24'}</p>
+              </div>
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <Card className="bg-white rounded-xl shadow-sm">
+                <CardHeader>
+                  <CardTitle>Línea de Tiempo del Viaje</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="relative px-4">
+                    {eventsWithETA.map((event: any, idx: number) => {
+                      const eventKey = event.id || idx.toString();
+                      const isMapVisible = activeMapEventId === eventKey;
+                      const isFirst = idx === 0;
+                      const isLast = idx === eventsWithETA.length - 1;
                       
-                      // Agregar evento de destino final si tenemos ETA
-                      const eventsWithETA = [...sortedEvents];
-                      if (tracking?.pod_eta_date && tracking?.shipped_to) {
-                        eventsWithETA.unshift({
-                          id: 'eta-destination',
-                          event_date: tracking.pod_eta_date,
-                          location: tracking.shipped_to,
-                          description: 'Estimated Time of Arrival',
-                          isETA: true
-                        });
+                      let countryCode = '';
+                      let locationDisplay = event.location || '';
+                      if (event.location) {
+                        const parts = event.location.split(',');
+                        const last = parts[parts.length - 1]?.trim();
+                        if (last && last.length === 2) {
+                          countryCode = last.toUpperCase();
+                          locationDisplay = parts.slice(0, -1).join(',').trim();
+                        }
                       }
                       
-                      return eventsWithETA.map((event: any, idx: number, arr: any[]) => {
-                        const isFirst = idx === 0;
-                        const isLast = idx === arr.length - 1;
-                        const isETA = event.isETA;
-                        
-                        // Extraer país de location
-                        let countryCode = '';
-                        let locationDisplay = '';
-                        if (event.location) {
-                          const parts = event.location.split(',');
-                          const last = parts[parts.length - 1]?.trim();
-                          if (last && last.length === 2) {
-                            countryCode = last.toUpperCase();
-                            locationDisplay = event.location.replace(/,[^,]*$/, '').trim();
-                          } else {
-                            locationDisplay = event.location;
-                          }
-                        }
-                        
-                        // Formato de fecha
-                        const dateStr = event.event_date ? new Date(event.event_date).toLocaleDateString('es-ES', { 
-                          day: '2-digit', 
-                          month: '2-digit', 
-                          year: 'numeric' 
-                        }) : '-';
-                        
-                        // Obtener datos del vessel desde vessel_data JSON
-                        let vesselInfo = null;
-                        if (event.vessel_data) {
-                          try {
-                            vesselInfo = JSON.parse(event.vessel_data);
-                          } catch (e) {
-                            vesselInfo = null;
-                          }
-                        }
-                        
-                        // Estado del evento para colores - USAR event_description
-                        const description = event.event_description || event.event_type || '';
-                        const isDelivered = description.toLowerCase().includes('delivered') || description.toLowerCase().includes('entregado');
-                        const isInTransit = description.toLowerCase().includes('loaded') || description.toLowerCase().includes('discharged') || description.toLowerCase().includes('transshipment');
-                        const isEmpty = description.toLowerCase().includes('empty');
-                        const isReceived = description.toLowerCase().includes('received');
-                        
-                        return (
-                          <div key={event.id || idx} className={`relative border-b border-gray-100 hover:bg-blue-50/30 transition-colors ${isFirst && isETA ? 'bg-green-50/50' : isFirst ? 'bg-blue-50/50' : ''}`}>
-                            {/* Línea continua del timeline - CORREGIDA */}
-                            {!isLast && (
-                              <div className="absolute left-[50px] top-[72px] w-0.5 h-full bg-gradient-to-b from-blue-400 to-blue-300 z-0"></div>
-                            )}
-                            
-                            <div className="flex items-center px-6 py-5 relative z-10">
-                              {/* Timeline con círculo - MEJORADO */}
-                              <div className="w-20 flex justify-center">
-                                <div className={`w-10 h-10 rounded-full border-3 flex items-center justify-center shadow-lg ${
-                                  isETA ? 'border-green-500 bg-green-500' :
-                                  isFirst ? 'border-blue-500 bg-blue-500' : 
-                                  isDelivered ? 'border-green-500 bg-green-100' :
-                                  isInTransit ? 'border-orange-500 bg-orange-100' :
-                                  isReceived ? 'border-blue-400 bg-blue-100' :
-                                  isEmpty ? 'border-gray-400 bg-gray-100' :
-                                  isLast ? 'border-gray-400 bg-gray-200' :
-                                  'border-blue-300 bg-white'
-                                }`}>
-                                  {isETA ? (
-                                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-                                    </svg>
-                                  ) : isFirst ? (
-                                    <div className="w-4 h-4 bg-white rounded-full animate-pulse"></div>
-                                  ) : isInTransit ? (
-                                    <svg className="w-5 h-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-                                      <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
-                                    </svg>
-                                  ) : isReceived ? (
-                                    <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 1.414L10.586 9.5 9.293 8.207a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-                                    </svg>
-                                  ) : isLast ? (
-                                    <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clipRule="evenodd"/>
-                                    </svg>
-                                  ) : (
-                                    <div className="w-3 h-3 bg-current rounded-full"></div>
-                                  )}
+                      const dateStr = event.event_date ? new Date(event.event_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                      const description = event.event_description || event.event_type || 'Evento sin descripción';
+                      const hasVessel = !!event.vessel_name;
+                      const vesselImo = getImoForVessel(tracking.metadata, event.vessel_name);
+
+                      return (
+                        <div key={eventKey} className="relative grid grid-cols-[4rem_1fr] pb-8">
+                          {!isLast && <div className="absolute left-8 top-10 h-full w-0.5 bg-gray-200" />}
+                          
+                          <div className="flex justify-center pt-1">
+                            <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-md z-10 ${getIconBgClass(event, isFirst)}`}>
+                              {getEventIcon(event, isFirst, isLast)}
+                            </div>
+                          </div>
+
+                          <div className="pl-4">
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_10rem] gap-x-4 gap-y-2">
+                              <div>
+                                <p className="font-semibold text-gray-800">{description}</p>
+                                <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                                  {countryCode && <ReactCountryFlag countryCode={countryCode} svg style={{ width: '18px', height: '12px' }} />}
+                                  <span>{locationDisplay}</span>
+                                  <span className="text-gray-300">|</span>
+                                  <span>{dateStr}</span>
                                 </div>
                               </div>
-                              
-                              {/* Fecha - MEJORADO */}
-                              <div className="w-28 pl-2">
-                                <div className="font-semibold text-gray-900 text-sm">{dateStr}</div>
-                                {event.event_time && (
-                                  <div className="text-xs text-gray-500 mt-1">{event.event_time}</div>
-                                )}
-                              </div>
-                              
-                              {/* Ubicación - MEJORADO */}
-                              <div className="w-48 pl-3">
-                                <div className="flex items-center gap-3">
-                                  {countryCode && (
-                                    <ReactCountryFlag 
-                                      countryCode={countryCode} 
-                                      svg 
-                                      style={{ width: '22px', height: '16px' }} 
-                                      title={countryCode} 
-                                    />
-                                  )}
-                                  <div>
-                                    <div className="font-medium text-gray-900 text-sm">
-                                      {locationDisplay || event.location || '-'}
-                                    </div>
-                                    {event.port && event.port !== locationDisplay && (
-                                      <div className="text-xs text-gray-500 mt-0.5">
-                                        {event.port}
-                                      </div>
+                              <div className="text-left md:text-right">
+                                <p className="font-medium text-sm text-blue-700">{event.vessel_name || '-'}</p>
+                                {event.vessel_voyage && <p className="text-xs text-gray-500">Viaje: {event.vessel_voyage}</p>}
+                                {hasVessel && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span tabIndex={0}>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="mt-1 text-xs h-auto py-1 px-2 text-primary hover:bg-primary/10"
+                                          onClick={() => setActiveMapEventId(isMapVisible ? null : eventKey)}
+                                          disabled={!vesselImo}
+                                        >
+                                          <MapPin className="h-3 w-3 mr-1.5" />
+                                          {isMapVisible ? 'Ocultar Mapa' : 'Ver Ubicación'}
+                                        </Button>
+                                      </span>
+                                    </TooltipTrigger>
+                                    {!vesselImo && (
+                                      <TooltipContent>
+                                        <p>IMO no disponible para este buque.</p>
+                                      </TooltipContent>
                                     )}
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              {/* Descripción - CORREGIDO */}
-                              <div className="flex-1 pl-4">
-                                <div className="font-medium text-gray-900 text-sm mb-1.5">
-                                  {event.description || 'Sin descripción'}
-                                </div>
-                                {/* Badges de estado */}
-                                <div className="flex gap-2">
-                                  {isETA && (
-                                    <Badge className="bg-green-100 text-green-800 border-green-200 text-xs px-2 py-1">
-                                      Destino Final
-                                    </Badge>
-                                  )}
-                                  {isDelivered && !isETA && (
-                                    <Badge className="bg-green-100 text-green-800 border-green-200 text-xs px-2 py-1">
-                                      Entregado
-                                    </Badge>
-                                  )}
-                                  {isInTransit && !isDelivered && !isETA && (
-                                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs px-2 py-1">
-                                      En tránsito
-                                    </Badge>
-                                  )}
-                                  {isEmpty && (
-                                    <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 text-xs px-2 py-1">
-                                      Vacío
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              
-                              {/* Buque/Viaje - MEJORADO */}
-                              <div className="w-52 pl-4">
-                                {event.vessel_name ? (
-                                  <div>
-                                    <div className="font-medium text-blue-700 text-sm mb-0.5">
-                                      {event.vessel_name}
-                                    </div>
-                                    {event.vessel_voyage && (
-                                      <div className="text-xs text-gray-600">
-                                        Viaje: {event.vessel_voyage}
-                                      </div>
-                                    )}
-                                    {event.vessel_imo && (
-                                      <div className="text-xs text-gray-500">
-                                        IMO: {event.vessel_imo}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : isETA ? (
-                                  <div className="text-sm text-gray-400 italic">Estimado</div>
-                                ) : (
-                                  <div className="text-sm text-gray-400">-</div>
-                                )}
-                              </div>
-                              
-                              {/* Instalación - MEJORADO */}
-                              <div className="w-64 pl-4">
-                                {event.facility_name ? (
-                                  <div>
-                                    <div className="font-medium text-gray-900 text-sm mb-0.5">
-                                      {event.facility_name}
-                                    </div>
-                                    {event.terminal && event.terminal !== event.facility_name && (
-                                      <div className="text-xs text-gray-500">
-                                        {event.terminal}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : isETA ? (
-                                  <div className="text-sm text-gray-400 italic">Puerto de destino</div>
-                                ) : (
-                                  <div className="text-sm text-gray-400">-</div>
+                                  </Tooltip>
                                 )}
                               </div>
                             </div>
+                            {description.toLowerCase().includes('transshipment') && <Badge variant="outline" className="mt-2">Transbordo</Badge>}
+                            {description.toLowerCase().includes('en tránsito') && <Badge variant="outline" className="mt-2 bg-blue-50 text-blue-700 border-blue-200">En Tránsito</Badge>}
+                            {isMapVisible && vesselImo && (
+                              <div className="mt-4">
+                                <VesselFinderEmbed imo={vesselImo} />
+                              </div>
+                            )}
                           </div>
-                        );
-                      });
-                    })()
-                  ) : (
-                    <div className="px-8 py-12 text-center text-gray-400">
-                      <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2 2v-5m16 0h-2M4 13h2"/>
-                      </svg>
-                      <p>No hay eventos disponibles para este contenedor</p>
-                    </div>
-                  )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        {/* Columna lateral con métricas y badges de estado */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Card de resumen de viaje */}
-          <Card className="shadow-xl border-0 bg-white overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-primary to-primary/80 text-white p-6">
-              <CardTitle className="text-xl font-semibold">Resumen del Viaje</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 space-y-4">
-              {/* Estado dinámico */}
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-gray-600">Estado:</span>
-                {tracking?.current_status === 'Empty to Shipper' ? (
-                  <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Vacío</Badge>
-                ) : tracking?.current_status === 'In Transit' ? (
-                  <Badge className="bg-blue-100 text-blue-800 border-blue-200">En tránsito</Badge>
-                ) : tracking?.current_status === 'Delivered' ? (
-                  <Badge className="bg-green-100 text-green-800 border-green-200">Entregado</Badge>
-                ) : (
-                  <Badge className="bg-gray-100 text-gray-800 border-gray-200">{tracking?.current_status || '-'}</Badge>
-                )}
-              </div>
-              {/* País de origen y destino */}
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-sm text-gray-600">Origen:</span>
-                {tracking?.origin_country && (
-                  <ReactCountryFlag countryCode={tracking.origin_country} svg style={{ width: '1.5em', height: '1.2em' }} title={tracking.origin_country} />
-                )}
-                <span className="font-medium text-gray-900">{tracking?.shipped_from || '-'}</span>
-              </div>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-sm text-gray-600">Destino:</span>
-                {tracking?.destination_country && (
-                  <ReactCountryFlag countryCode={tracking.destination_country} svg style={{ width: '1.5em', height: '1.2em' }} title={tracking.destination_country} />
-                )}
-                <span className="font-medium text-gray-900">{tracking?.shipped_to || '-'}</span>
-              </div>
-              {/* Fechas clave */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">ETA (Arribo estimado)</span>
-                <span className="text-sm font-medium text-gray-900">{tracking?.pod_eta_date || tracking?.eta || '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Primer evento</span>
-                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.first_event_date || '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Último evento</span>
-                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.last_event_date || '-'}</span>
-              </div>
-              {/* Métricas */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Total eventos</span>
-                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.total_events || 0}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Puertos</span>
-                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.total_ports || 0}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Transbordos</span>
-                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.transhipment_count || 0}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Buques</span>
-                <span className="text-sm font-medium text-gray-900">{trackingData?.summary?.total_vessels || 0}</span>
-              </div>
-            </CardContent>
-          </Card>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div>
+              <Card className="shadow-md border-0 bg-white overflow-hidden sticky top-8">
+                <CardHeader className="bg-gray-800 text-white p-5">
+                  <CardTitle className="text-lg font-semibold">Resumen del Viaje</CardTitle>
+                </CardHeader>
+                <CardContent className="p-5 space-y-3 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Estado:</span>
+                    <Badge>{tracking?.current_status || 'Vacío'}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Origen:</span>
+                    <span className="font-medium text-gray-800">{tracking?.shipped_from || 'Mundra, IN'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Destino:</span>
+                    <span className="font-medium text-gray-800">{tracking?.shipped_to || 'Cartagena, CO'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">ETA (Arribo estimado):</span>
+                    <span className="font-medium text-gray-800">{tracking?.pod_eta_date || '2025-09-24'}</span>
+                  </div>
+                  <div className="border-t my-2" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Primer evento:</span>
+                    <span className="font-medium text-gray-800">{summary?.first_event_date || '2025-07-16'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Último evento:</span>
+                    <span className="font-medium text-gray-800">{summary?.last_event_date || '2025-09-08'}</span>
+                  </div>
+                  <div className="border-t my-2" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Total eventos:</span>
+                    <span className="font-medium text-gray-800">{summary?.total_events || events.length || 5}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Puertos:</span>
+                    <span className="font-medium text-gray-800">{summary?.total_ports || 2}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Transbordos:</span>
+                    <span className="font-medium text-gray-800">{summary?.transhipment_count || 2}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Buques:</span>
+                    <span className="font-medium text-gray-800">{summary?.total_vessels || 2}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 };
 

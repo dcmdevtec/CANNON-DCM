@@ -9,8 +9,19 @@ export async function fetchContainerTrackingDetail(containerNumber: string) {
     .eq("container_number", containerNumber)
     .order("created_at", { ascending: false })
     .limit(1);
+
   const tracking = trackings && trackings.length > 0 ? trackings[0] : null;
   if (trackingError || !tracking) return { error: trackingError || 'No tracking found' };
+
+  // Si metadata es un string, lo convertimos a un objeto JSON
+  if (tracking.metadata && typeof tracking.metadata === 'string') {
+    try {
+      tracking.metadata = JSON.parse(tracking.metadata);
+    } catch (e) {
+      console.error("Error al parsear el string de metadata:", e);
+      // Si falla, lo dejamos como está para evitar que la app se rompa
+    }
+  }
 
   // 2. Buscar eventos
   const { data: events, error: eventsError } = await supabase
