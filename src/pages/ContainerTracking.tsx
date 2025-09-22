@@ -1,3 +1,18 @@
+// Traducción de estados de tracking
+const statusTranslations: Record<string, string> = {
+  "Export received at CY": "Recibido para exportación en CY",
+  "Empty to Shipper": "Vacío al exportador",
+  "Gate out": "Salida de puerto",
+  "Loaded on Vessel": "Cargado en buque",
+  "Discharged": "Descargado",
+  "Arrived at Port": "Llegó a puerto",
+  // Agrega más traducciones según tus datos reales
+};
+
+function translateStatus(status: string | null | undefined): string {
+  if (!status) return "-";
+  return statusTranslations[status] || status;
+}
 import { useEffect, useState, useMemo } from "react";
 import {
   Table,
@@ -50,51 +65,24 @@ const ContainerTracking = () => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      
-      const { data: facturasData, error: facturasError } = await supabase.from("cnn_factura_tracking").select("*");
-      if (facturasError) {
-        console.error("Error fetching facturas:", facturasError);
+      const { data, error } = await supabase.from("cnn_container_factura_view").select("*");
+      if (error) {
+        console.error("Error fetching contenedores:", error);
         setFacturas([]);
         setLoading(false);
         return;
       }
-
-      const containerNumbers = facturasData.map(f => f.num_contenedor).filter(Boolean);
-      const { data: trackingData, error: trackingError } = await supabase
-        .from("cnn_container_tracking")
-        .select("container_number, atd_origin, pod_eta_date")
-        .in("container_number", containerNumbers);
-
-      const trackingMap = new Map();
-      if (trackingData) {
-        trackingData.forEach(t => {
-          if (!trackingMap.has(t.container_number)) {
-            trackingMap.set(t.container_number, { atd: t.atd_origin, eta: t.pod_eta_date });
-          }
-        });
-      }
-
-      const mergedData = facturasData.map(factura => {
-        const extraData = trackingMap.get(factura.num_contenedor);
-        return {
-          ...factura,
-          atd: extraData?.atd || factura.atd,
-          eta: extraData?.eta || factura.eta,
-        };
-      });
-
-      const sortedData = mergedData.sort((a, b) => {
+      // Ordenar igual que antes
+      const sortedData = data.sort((a, b) => {
         if (a.contrato < b.contrato) return -1;
         if (a.contrato > b.contrato) return 1;
         const seqA = parseInt(a.contenedor?.split(' ')[0] || '0');
         const seqB = parseInt(b.contenedor?.split(' ')[0] || '0');
         return seqA - seqB;
       });
-
       setFacturas(sortedData);
       setLoading(false);
     };
-
     fetchData();
   }, []);
 
@@ -183,6 +171,7 @@ const ContainerTracking = () => {
               <TableHead className="text-[#6b7280] font-bold">LLEGADA A BARRANQUILLA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">FACTURA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">NAVIERA</TableHead>
+              <TableHead className="text-[#6b7280] font-bold">ESTADO</TableHead>
               <TableHead className="text-[#6b7280] font-bold">ACCIÓN</TableHead>
             </TableRow>
           </TableHeader>
@@ -211,6 +200,7 @@ const ContainerTracking = () => {
                     </TableCell>
                     <TableCell>{row.factura}</TableCell>
                     <TableCell>{row.naviera}</TableCell>
+                    <TableCell>{translateStatus(row.estado)}</TableCell>
                     <TableCell>
                       <span className="inline-flex gap-2">
                         <button title="Ver" onClick={() => navigate(`/container-detail/${row.num_contenedor}`)} className="hover:bg-gray-100 rounded-full p-1">

@@ -413,6 +413,44 @@ $upsert_func$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- FINALIZACIÓN DEL SCRIPT
+
+-- ============================================================================
+-- VISTA: CNN_CONTAINER_FACTURA_VIEW
+-- Combina los campos principales de ambas tablas, priorizando datos en tiempo real
+-- ============================================================================
+CREATE OR REPLACE VIEW cnn_container_factura_view AS
+SELECT
+    f.id AS factura_id,
+    f.titulo,
+    f.proveedor,
+    f.contrato,
+    f.despacho,
+    f.num_contenedor,
+    f.contenedor,
+    -- ETD y ATD solo de factura
+    f.etd AS etd,
+    NULL AS atd, -- No hay campo atd en ninguna tabla
+    COALESCE(t.pod_eta_date, f.eta) AS eta,
+    f.llegada_bquilla,
+    f.factura,
+    COALESCE(t.current_status, f.estado) AS estado,
+    COALESCE(t.current_status, f.estado) AS estado_tracking,
+    COALESCE(t.current_location, NULL) AS ubicacion_actual,
+    COALESCE(t.current_status, NULL) AS status_tracking,
+    COALESCE(t.tracking_type, NULL) AS tracking_type,
+    COALESCE(t.tracking_date, NULL) AS tracking_date,
+    COALESCE(t.route_summary, NULL) AS route_summary,
+    COALESCE(t.transhipments, NULL) AS transhipments,
+    COALESCE(t.is_delivered, NULL) AS is_delivered,
+    COALESCE(t.total_events, NULL) AS total_events,
+    COALESCE(t.number_of_containers, NULL) AS number_of_containers,
+    f.naviera AS naviera
+FROM
+    cnn_factura_tracking f
+INNER JOIN
+    cnn_container_tracking t
+    ON t.container_number = f.num_contenedor;
+;
 -- ============================================================================
 
 -- Comentario de verificación
