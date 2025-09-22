@@ -111,18 +111,34 @@ const ContainerTracking = () => {
     'Todos': facturas.length
   }), [facturas]);
 
+  // Lógica de colores por contrato: alterna blanco y gris claro cada vez que cambia el contrato
+  // Asigna un color pastel único a cada contrato, agrupando visualmente los iguales
   const contractColorMap = useMemo(() => {
     const map = new Map();
-    const colorPalette = ["bg-white", "bg-gray-100"];
-    let lastContract: string | null = null;
+    const colorPalette = [
+      "bg-[#e3f2fd]", // azul claro
+      "bg-[#e8f5e9]", // verde claro
+      "bg-[#fffde7]", // amarillo claro
+      "bg-[#fce4ec]", // rosa claro
+      "bg-[#f3e5f5]", // lila claro
+      "bg-[#f9fbe7]", // lima claro
+      "bg-[#e0f7fa]", // celeste claro
+      "bg-[#fbe9e7]", // naranja claro
+    ];
+    const contractToColor = new Map();
     let colorIndex = 0;
     filteredFacturas.forEach(factura => {
-      if (factura.contrato !== lastContract) {
-        colorIndex = (colorIndex + 1) % colorPalette.length;
-        lastContract = factura.contrato;
+      const contractKey = String(factura.contrato || '').trim();
+      if (!contractToColor.has(contractKey)) {
+        contractToColor.set(contractKey, colorPalette[colorIndex % colorPalette.length]);
+        colorIndex++;
       }
-      map.set(factura.id, colorPalette[colorIndex]);
+      // Usar num_contenedor como clave única
+      map.set(factura.num_contenedor, contractToColor.get(contractKey));
     });
+    // Log para depuración
+    console.log('CONTRACT COLOR MAP:', Array.from(contractToColor.entries()));
+    console.log('CONTENEDOR TO COLOR:', Array.from(map.entries()));
     return map;
   }, [filteredFacturas]);
 
@@ -166,7 +182,7 @@ const ContainerTracking = () => {
               <TableHead className="text-[#6b7280] font-bold">DESPACHO</TableHead>
               <TableHead className="text-[#6b7280] font-bold">CONTENEDOR</TableHead>
               <TableHead className="text-[#6b7280] font-bold">ETD</TableHead>
-              <TableHead className="text-[#6b7280] font-bold">ATD</TableHead>
+             
               <TableHead className="text-[#6b7280] font-bold">ETA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">LLEGADA A BARRANQUILLA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">FACTURA</TableHead>
@@ -182,7 +198,7 @@ const ContainerTracking = () => {
               filteredFacturas.map((row) => {
                 const { progress, elapsed, total, isError } = calculateProgress(row.etd, row.eta);
                 return (
-                  <TableRow key={row.id} className={contractColorMap.get(row.id)}>
+                  <TableRow key={row.num_contenedor} className={contractColorMap.get(row.num_contenedor)}>
                     <TableCell><input type="checkbox" /></TableCell>
                     <TableCell>{row.titulo}</TableCell>
                     <TableCell>{row.proveedor}</TableCell>
@@ -193,7 +209,7 @@ const ContainerTracking = () => {
                       <div className="text-xs text-[#6b7280]">{row.contenedor}</div>
                     </TableCell>
                     <TableCell>{formatDate(row.etd)}</TableCell>
-                    <TableCell>{formatDate(row.atd)}</TableCell>
+                 
                     <TableCell>{formatDate(row.eta)}</TableCell>
                     <TableCell>
                       {!isError && <TransitProgressBar progress={progress} elapsedDays={elapsed} totalDays={total} />}
