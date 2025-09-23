@@ -125,12 +125,17 @@ const Dashboard = () => {
   const meses = useMemo(() => clean(mensual.map(x => String(x.mes))), [mensual]);
   const aniosM = useMemo(() => clean(mensual.map(x => String(x.anio))), [mensual]);
 
-  // Filtro global de proveedor
+  // Filtros globales de proveedor y naviera
   const allProveedores = useMemo(() => clean([
     ...semanal.map(x => x.proveedor),
     ...mensual.map(x => x.proveedor)
   ]), [semanal, mensual]);
+  const allNavieras = useMemo(() => clean([
+    ...semanal.map(x => x.naviera),
+    ...mensual.map(x => x.naviera)
+  ]), [semanal, mensual]);
   const [proveedorGlobal, setProveedorGlobal] = useState('');
+  const [navieraGlobal, setNavieraGlobal] = useState('');
 
   // Filtrado de datos según selects
   const semanalFiltrado = useMemo(() => semanal.filter(x =>
@@ -140,7 +145,8 @@ const Dashboard = () => {
     && (!semana || String(x.semana) === semana)
     && (!anioS || String(x.anio) === anioS)
     && (!proveedorGlobal || x.proveedor === proveedorGlobal)
-  ), [semanal, navieraS, proveedorS, puertoS, semana, anioS, proveedorGlobal]);
+    && (!navieraGlobal || x.naviera === navieraGlobal)
+  ), [semanal, navieraS, proveedorS, puertoS, semana, anioS, proveedorGlobal, navieraGlobal]);
 
   const mensualFiltrado = useMemo(() => mensual.filter(x =>
     (!navieraM || x.naviera === navieraM)
@@ -149,18 +155,32 @@ const Dashboard = () => {
     && (!mes || String(x.mes) === mes)
     && (!anioM || String(x.anio) === anioM)
     && (!proveedorGlobal || x.proveedor === proveedorGlobal)
-  ), [mensual, navieraM, proveedorM, puertoM, mes, anioM, proveedorGlobal]);
+    && (!navieraGlobal || x.naviera === navieraGlobal)
+  ), [mensual, navieraM, proveedorM, puertoM, mes, anioM, proveedorGlobal, navieraGlobal]);
 
   // Eliminar cualquier referencia a variables viejas
 
   
   
 
-    // Cálculos para los cards resumen
-    const totalContenedores = mensual.reduce((acc, x) => acc + (parseInt(x.total_contenedores) || 0), 0);
-    const totalContenedoresEmbarcados = semanal.reduce((acc, x) => acc + (parseInt(x.espacios_usados) || 0), 0);
-    const semanasUnicas = semanas.length;
-    const mesesUnicos = meses.length;
+    // Cálculos filtrados para las cards
+    const totalContenedores = mensualFiltrado.reduce((acc, x) => acc + (parseInt(x.total_contenedores) || 0), 0);
+    const totalContenedoresEmbarcados = semanalFiltrado.reduce((acc, x) => acc + (parseInt(x.espacios_usados) || 0), 0);
+    const semanasUnicas = Array.from(new Set(semanalFiltrado.map(x => x.semana))).length;
+    const mesesUnicos = Array.from(new Set(mensualFiltrado.map(x => x.mes))).length;
+
+    // Espacios reservados: 10 por semana (por naviera/proveedor)
+    const ESPACIOS_RESERVADOS_POR_SEMANA = 10;
+    const totalEspaciosReservados = semanasUnicas * ESPACIOS_RESERVADOS_POR_SEMANA;
+
+    // Promedio semanal de embarques para la naviera seleccionada (entero)
+    let promedioSemanalNaviera = 0;
+    if (navieraGlobal) {
+      const semanasNaviera = semanal.filter(x => x.naviera === navieraGlobal);
+      const totalNaviera = semanasNaviera.reduce((acc, x) => acc + (parseInt(x.espacios_usados) || 0), 0);
+      const semanasUnicasNaviera = Array.from(new Set(semanasNaviera.map(x => x.semana))).length;
+      promedioSemanalNaviera = semanasUnicasNaviera > 0 ? Math.round(totalNaviera / semanasUnicasNaviera) : 0;
+    }
 
     return (
       <div className="space-y-6">
@@ -173,16 +193,15 @@ const Dashboard = () => {
             Exportar
           </button>
         </div>
-        {/* Cards resumen */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Contenedores Totales" value={totalContenedores} icon={Package} />
-          <StatCard title="Contenedores embarcados" value={totalContenedoresEmbarcados} icon={Package} />
-          <StatCard title="Semanas Distintas" value={semanasUnicas} icon={Package} />
-          <StatCard title="Meses Distintos" value={mesesUnicos} icon={Package} />
-        </div>
-
-        {/* Filtro global de proveedor */}
+        {/* Filtros globales de naviera y proveedor */}
         <div className="flex flex-wrap items-center gap-4 mb-2">
+          <Select value={allNavieras.includes(navieraGlobal) ? navieraGlobal : '__all__'} onValueChange={v => setNavieraGlobal(v === '__all__' ? '' : v)}>
+            <SelectTrigger className="w-[220px] bg-white"><SelectValue placeholder="Filtrar por naviera (global)" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas las navieras</SelectItem>
+              {allNavieras.map(n => (typeof n === 'string' && n.length > 0 ? <SelectItem key={n} value={n}>{n}</SelectItem> : null))}
+            </SelectContent>
+          </Select>
           <Select value={allProveedores.includes(proveedorGlobal) ? proveedorGlobal : '__all__'} onValueChange={v => setProveedorGlobal(v === '__all__' ? '' : v)}>
             <SelectTrigger className="w-[220px] bg-white"><SelectValue placeholder="Filtrar por proveedor (global)" /></SelectTrigger>
             <SelectContent>
@@ -190,6 +209,13 @@ const Dashboard = () => {
               {allProveedores.map(p => (typeof p === 'string' && p.length > 0 ? <SelectItem key={p} value={p}>{p}</SelectItem> : null))}
             </SelectContent>
           </Select>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard title="Contenedores Totales" value={totalContenedores} icon={Package} />
+          <StatCard title="Contenedores embarcados" value={totalContenedoresEmbarcados} icon={Package} />
+          <StatCard title="Espacios reservados" value={totalEspaciosReservados} icon={Package} />
+          <StatCard title="Semanas Distintas" value={semanasUnicas} icon={Package} />
+          <StatCard title={navieraGlobal ? `Promedio semanal (${navieraGlobal})` : 'Promedio semanal (naviera)'} value={navieraGlobal ? promedioSemanalNaviera : '-'} icon={Package} />
         </div>
         <div className="flex flex-col gap-6 lg:flex-row lg:gap-4">
           {/* Gráfico semanal */}
