@@ -1,27 +1,52 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
-import { getWeek, getMonth, parseISO, startOfDay, endOfDay } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList, Legend } from 'recharts';
+// Tooltip personalizado para gráfico semanal
+const CustomTooltipSemanal = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length && payload[0].payload) {
+    const d = payload[0].payload;
+    return (
+      <div className="rounded border bg-white p-2 shadow text-xs min-w-[180px]">
+        <div><b>Semana:</b> {d.semana}</div>
+        <div><b>Naviera:</b> {d.naviera || '-'}</div>
+        <div><b>Proveedor:</b> {d.proveedor || '-'}</div>
+        <div><b>Puerto:</b> {d.puerto || '-'}</div>
+        <div><b>Año:</b> {d.anio || '-'}</div>
+        <div><b>Contenedores embarcados:</b> {d.espacios_usados}</div>
+      </div>
+    );
+  }
+  return null;
+};
+
+// Tooltip personalizado para gráfico mensual
+const CustomTooltipMensual = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length && payload[0].payload) {
+    const d = payload[0].payload;
+    return (
+      <div className="rounded border bg-white p-2 shadow text-xs min-w-[180px]">
+        <div><b>Mes:</b> {d.mes}</div>
+        <div><b>Naviera:</b> {d.naviera || '-'}</div>
+        <div><b>Proveedor:</b> {d.proveedor || '-'}</div>
+        <div><b>Puerto:</b> {d.puerto || '-'}</div>
+        <div><b>Año:</b> {d.anio || '-'}</div>
+        <div><b>Total contenedores:</b> {d.total_contenedores}</div>
+      </div>
+    );
+  }
+  return null;
+};
 import { Ship, Anchor, PackageCheck, Package } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DatePickerWithRange } from "@/components/ui/date-picker-with-range";
-import { DateRange } from "react-day-picker";
 import { Skeleton } from '@/components/ui/skeleton';
 
-const getWeekNumber = (dateStr: string) => {
-  try {
-    return getWeek(parseISO(dateStr), { weekStartsOn: 1 });
-  } catch (e) { return null; }
-};
 
-const getMonthName = (dateStr: string) => {
-  try {
-    const monthIndex = getMonth(parseISO(dateStr));
-    return es.localize?.month(monthIndex, { width: 'abbreviated' }).toUpperCase().replace('.', '');
-  } catch (e) { return null; }
-};
+// Utilidad para limpiar opciones de filtro (sin vacíos, null, undefined, etc)
+const clean = (arr: any[]) => Array.from(new Set(arr))
+  .map(v => (typeof v === 'string' ? v.trim() : String(v ?? '')))
+  .filter(v => typeof v === 'string' && v.length > 0 && !/^\s+$/.test(v) && v !== 'null' && v !== 'undefined' && v !== 'NaN' && v !== '')
+  .map(v => v.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
 
 const StatCard = ({ title, value, icon: Icon }: { title: string, value: string | number, icon: React.ElementType }) => (
   <Card>
@@ -35,160 +60,185 @@ const StatCard = ({ title, value, icon: Icon }: { title: string, value: string |
   </Card>
 );
 
+
 const Dashboard = () => {
-  const [allData, setAllData] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<string[]>([]);
-  const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  // Estados para semanal
+  const [semanal, setSemanal] = useState<any[]>([]);
+  const [navieraS, setNavieraS] = useState('');
+  const [proveedorS, setProveedorS] = useState('');
+  const [puertoS, setPuertoS] = useState('');
+  const [semana, setSemana] = useState('');
+  const [anioS, setAnioS] = useState('');
+  // Estados para mensual
+  const [mensual, setMensual] = useState<any[]>([]);
+  const [navieraM, setNavieraM] = useState('');
+  const [proveedorM, setProveedorM] = useState('');
+  const [puertoM, setPuertoM] = useState('');
+  const [mes, setMes] = useState('');
+  const [anioM, setAnioM] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('cnn_factura_tracking')
-        .select('proveedor, estado, etd, llegada_bquilla');
-
-      if (error) {
-        console.error("Error fetching dashboard data:", error);
-      } else {
-        setAllData(data);
-        const uniqueSuppliers = Array.from(new Set(data.map(item => item.proveedor).filter(Boolean)));
-        setSuppliers(uniqueSuppliers);
-      }
+    setLoading(true);
+    Promise.all([
+      supabase.from('cnn_inventario_espacios_semanal').select('*'),
+      supabase.from('cnn_llegada_contenedores_mensual').select('*')
+    ]).then(([resSem, resMen]) => {
+      setSemanal(resSem.data || []);
+      setMensual(resMen.data || []);
       setLoading(false);
-    };
-    fetchData();
+    });
   }, []);
 
-  const filteredData = useMemo(() => {
-    return allData.filter(item => {
-      const supplierMatch = selectedSupplier === 'all' || item.proveedor === selectedSupplier;
-      let dateMatch = true;
-      if (dateRange?.from && item.etd) {
-        try {
-          const itemDate = parseISO(item.etd);
-          dateMatch = itemDate >= startOfDay(dateRange.from);
-          if (dateRange.to) {
-            dateMatch = dateMatch && itemDate <= endOfDay(dateRange.to);
-          }
-        } catch (e) {
-          dateMatch = false;
-        }
-      } else if (dateRange?.from) {
-        dateMatch = false;
-      }
-      return supplierMatch && dateMatch;
-    });
-  }, [allData, selectedSupplier, dateRange]);
 
-  const { cardStats, shipmentWeekData, arrivalMonthData } = useMemo(() => {
-    const stats = {
-      total: filteredData.length,
-      transit: filteredData.filter(d => d.estado === 'En Tránsito').length,
-      port: filteredData.filter(d => d.estado === 'En Puerto').length,
-      delivered: filteredData.filter(d => d.estado === 'Entregado').length,
-    };
 
-    const weekCounts: { [key: number]: number } = {};
-    filteredData.forEach(item => {
-      if (item.etd) {
-        const week = getWeekNumber(item.etd);
-        if (week) weekCounts[week] = (weekCounts[week] || 0) + 1;
-      }
-    });
-    const weeks = Object.keys(weekCounts).map(Number).sort((a, b) => a - b);
-    const minWeek = weeks.length > 0 ? weeks[0] : 1;
-    const maxWeek = weeks.length > 0 ? weeks[weeks.length - 1] : 52;
-    const weekData = [];
-    for (let i = minWeek; i <= maxWeek; i++) {
-        weekData.push({ semana: `${i}`, total: weekCounts[i] || 0 });
-    }
+  // Filtros únicos para selects
+  const navierasS = useMemo(() => clean(semanal.map(x => x.naviera)), [semanal]);
+  const proveedoresS = useMemo(() => clean(semanal.map(x => x.proveedor)), [semanal]);
+  const puertosS = useMemo(() => clean(semanal.map(x => x.puerto)), [semanal]);
+  const semanas = useMemo(() => clean(semanal.map(x => String(x.semana))), [semanal]);
+  const aniosS = useMemo(() => clean(semanal.map(x => String(x.anio))), [semanal]);
 
-    const monthCounts: { [key: string]: number } = {};
-    const monthOrder = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-    filteredData.forEach(item => {
-      if (item.llegada_bquilla) {
-        const monthName = getMonthName(item.llegada_bquilla);
-        if (monthName) monthCounts[monthName] = (monthCounts[monthName] || 0) + 1;
-      }
-    });
-    const arrivalData = monthOrder
-      .filter(month => monthCounts[month])
-      .map(month => ({ mes: month, total: monthCounts[month] }));
+  const navierasM = useMemo(() => clean(mensual.map(x => x.naviera)), [mensual]);
+  const proveedoresM = useMemo(() => clean(mensual.map(x => x.proveedor)), [mensual]);
+  const puertosM = useMemo(() => clean(mensual.map(x => x.puerto)), [mensual]);
+  const meses = useMemo(() => clean(mensual.map(x => String(x.mes))), [mensual]);
+  const aniosM = useMemo(() => clean(mensual.map(x => String(x.anio))), [mensual]);
 
-    return { cardStats: stats, shipmentWeekData: weekData, arrivalMonthData: arrivalData };
-  }, [filteredData]);
+  // Filtro global de proveedor
+  const allProveedores = useMemo(() => clean([
+    ...semanal.map(x => x.proveedor),
+    ...mensual.map(x => x.proveedor)
+  ]), [semanal, mensual]);
+  const [proveedorGlobal, setProveedorGlobal] = useState('');
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
-            <SelectTrigger className="w-[180px] bg-white">
-              <SelectValue placeholder="Proveedor" />
-            </SelectTrigger>
+  // Filtrado de datos según selects
+  const semanalFiltrado = useMemo(() => semanal.filter(x =>
+    (!navieraS || x.naviera === navieraS)
+    && (!proveedorS || x.proveedor === proveedorS)
+    && (!puertoS || x.puerto === puertoS)
+    && (!semana || String(x.semana) === semana)
+    && (!anioS || String(x.anio) === anioS)
+    && (!proveedorGlobal || x.proveedor === proveedorGlobal)
+  ), [semanal, navieraS, proveedorS, puertoS, semana, anioS, proveedorGlobal]);
+
+  const mensualFiltrado = useMemo(() => mensual.filter(x =>
+    (!navieraM || x.naviera === navieraM)
+    && (!proveedorM || x.proveedor === proveedorM)
+    && (!puertoM || x.puerto === puertoM)
+    && (!mes || String(x.mes) === mes)
+    && (!anioM || String(x.anio) === anioM)
+    && (!proveedorGlobal || x.proveedor === proveedorGlobal)
+  ), [mensual, navieraM, proveedorM, puertoM, mes, anioM, proveedorGlobal]);
+
+  // Eliminar cualquier referencia a variables viejas
+
+  
+  
+
+    // Cálculos para los cards resumen
+    const totalContenedores = mensual.reduce((acc, x) => acc + (parseInt(x.total_contenedores) || 0), 0);
+    const totalContenedoresEmbarcados = semanal.reduce((acc, x) => acc + (parseInt(x.espacios_usados) || 0), 0);
+    const semanasUnicas = semanas.length;
+    const mesesUnicos = meses.length;
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+        </div>
+        {/* Cards resumen */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard title="Contenedores Totales" value={totalContenedores} icon={Package} />
+          <StatCard title="Contenedores embarcados" value={totalContenedoresEmbarcados} icon={Package} />
+          <StatCard title="Semanas Distintas" value={semanasUnicas} icon={Package} />
+          <StatCard title="Meses Distintos" value={mesesUnicos} icon={Package} />
+        </div>
+
+        {/* Filtro global de proveedor */}
+        <div className="flex flex-wrap items-center gap-4 mb-2">
+          <Select value={allProveedores.includes(proveedorGlobal) ? proveedorGlobal : '__all__'} onValueChange={v => setProveedorGlobal(v === '__all__' ? '' : v)}>
+            <SelectTrigger className="w-[220px] bg-white"><SelectValue placeholder="Filtrar por proveedor (global)" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos los Proveedores</SelectItem>
-              {suppliers.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              <SelectItem value="__all__">Todos los proveedores</SelectItem>
+              {allProveedores.map(p => (typeof p === 'string' && p.length > 0 ? <SelectItem key={p} value={p}>{p}</SelectItem> : null))}
             </SelectContent>
           </Select>
-          <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+        </div>
+        <div className="flex flex-col gap-6 lg:flex-row lg:gap-4">
+          {/* Gráfico semanal */}
+          <Card className="flex-1 min-w-[340px]">
+            <CardHeader className="flex flex-col items-start">
+              <div className="mb-2 flex flex-wrap items-center gap-2 w-full">
+                <Select value={semanas.includes(semana) ? semana : '__all__'} onValueChange={v => setSemana(v === '__all__' ? '' : v)}>
+                  <SelectTrigger className="w-full max-w-[180px] bg-white"><SelectValue placeholder="Semana" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Semana</SelectItem>
+                    {semanas.map(s => (typeof s === 'string' && s.length > 0 ? <SelectItem key={s} value={s}>{s}</SelectItem> : null))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <CardTitle>Semanas de Embarque</CardTitle>
+                <span title="Cantidad de contenedores embarcados en cada semana. Calculado desde el inventario semanal de espacios usados." className="text-gray-400 cursor-help text-lg">&#9432;</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={semanalFiltrado} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
+                  <XAxis dataKey="semana" stroke="#222" fontSize={14} tickLine={false} axisLine={false} interval={0} angle={0} dy={16} tick={{ fontSize: 14, fill: '#222', fontWeight: 500 }} />
+                  <YAxis stroke="#222" fontSize={14} tickLine={false} axisLine={false} label={{ value: 'Total', angle: -90, position: 'insideLeft', offset: 28, fontSize: 15, fill: '#222' }} tick={{ fontSize: 14, fill: '#222', fontWeight: 500 }} allowDecimals={false} domain={[0, 'dataMax + 1']} />
+                  <Tooltip content={<CustomTooltipSemanal />} cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} />
+                  <Bar dataKey="espacios_usados" name="Contenedores embarcados" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="espacios_usados" position="top" style={{ fill: '#111', fontSize: '16px', fontWeight: 700, textShadow: '0 1px 2px #fff' }} formatter={(value: number) => value > 0 ? value : ''} />
+                  </Bar>
+                  <Legend verticalAlign="top" height={32} iconType="rect" wrapperStyle={{ fontSize: 15, color: '#222', fontWeight: 600, marginBottom: 10, paddingLeft: 10 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+            {/* Etiqueta de eje X como leyenda */}
+            <div className="text-center text-base font-semibold text-gray-700 mt-2">Semana</div>
+          </Card>
+          {/* Gráfico mensual */}
+          <Card className="flex-1 min-w-[340px]">
+            <CardHeader className="flex flex-col items-start">
+              <div className="mb-2 flex flex-wrap items-center gap-2 w-full">
+                <Select value={meses.includes(mes) ? mes : '__all__'} onValueChange={v => setMes(v === '__all__' ? '' : v)}>
+                  <SelectTrigger className="w-full max-w-[180px] bg-white"><SelectValue placeholder="Meses (Llegada a B/quilla)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Meses (Llegada a B/quilla)</SelectItem>
+                    {meses.map(m => (typeof m === 'string' && m.length > 0 ? <SelectItem key={m} value={m}>{m}</SelectItem> : null))}
+                  </SelectContent>
+                </Select>
+                <Select value={puertosM.includes(puertoM) ? puertoM : '__all__'} onValueChange={v => setPuertoM(v === '__all__' ? '' : v)}>
+                  <SelectTrigger className="w-full max-w-[200px] bg-white"><SelectValue placeholder="Llegada a B/quilla" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Llegada a B/quilla</SelectItem>
+                    {puertosM.map(p => (typeof p === 'string' && p.length > 0 ? <SelectItem key={p} value={p}>{p}</SelectItem> : null))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <CardTitle>LLEGADA CONTENEDORES</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={mensualFiltrado} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
+                  <XAxis dataKey="mes" stroke="#222" fontSize={14} tickLine={false} axisLine={false} interval={0} angle={0} dy={16} tick={{ fontSize: 14, fill: '#222', fontWeight: 500 }} />
+                  <YAxis stroke="#222" fontSize={14} tickLine={false} axisLine={false} label={{ value: 'Total', angle: -90, position: 'insideLeft', offset: 28, fontSize: 15, fill: '#222' }} tick={{ fontSize: 14, fill: '#222', fontWeight: 500 }} allowDecimals={false} domain={[0, 'dataMax + 1']} />
+                  <Tooltip content={<CustomTooltipMensual />} cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} />
+                  <Bar dataKey="total_contenedores" name="Total contenedores" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="total_contenedores" position="top" style={{ fill: '#111', fontSize: '16px', fontWeight: 700, textShadow: '0 1px 2px #fff' }} formatter={(value: number) => value > 0 ? value : ''} />
+                  </Bar>
+                  <Legend verticalAlign="top" height={32} iconType="rect" wrapperStyle={{ fontSize: 15, color: '#222', fontWeight: 600, marginBottom: 10, paddingLeft: 10 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+            {/* Etiqueta de eje X como leyenda */}
+            <div className="text-center text-base font-semibold text-gray-700 mt-2">Mes</div>
+          </Card>
         </div>
       </div>
-
-      {loading ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <StatCard title="Contenedores Totales" value={cardStats.total} icon={Package} />
-          <StatCard title="En Tránsito" value={cardStats.transit} icon={Ship} />
-          <StatCard title="En Puerto" value={cardStats.port} icon={Anchor} />
-          <StatCard title="Entregados" value={cardStats.delivered} icon={PackageCheck} />
-        </div>
-      )}
-      
-      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Semanas de Embarque</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={shipmentWeekData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
-                <XAxis dataKey="semana" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} />
-                <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                   <LabelList dataKey="total" position="top" style={{ fill: '#374151', fontSize: '12px' }} formatter={(value: number) => value > 0 ? value : ''} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Llegada de Contenedores</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={arrivalMonthData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
-                <XAxis dataKey="mes" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} />
-                <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                  <LabelList dataKey="total" position="top" style={{ fill: '#374151', fontSize: '12px' }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default Dashboard;

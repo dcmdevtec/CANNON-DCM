@@ -1,3 +1,36 @@
+-- ============================================================================ 
+-- VISTA: CNN_INVENTARIO_ESPACIOS_SEMANAL
+-- Inventario semanal de espacios usados por naviera, proveedor y puerto
+-- ============================================================================ 
+CREATE OR REPLACE VIEW cnn_inventario_espacios_semanal AS
+SELECT
+    EXTRACT(YEAR FROM f.etd) AS anio,
+    EXTRACT(WEEK FROM f.etd) AS semana,
+    f.naviera,
+    f.proveedor,
+    f.llegada_bquilla AS puerto,
+    COUNT(*) AS espacios_usados
+FROM cnn_container_factura_view f
+WHERE f.etd IS NOT NULL
+GROUP BY anio, semana, f.naviera, f.proveedor, puerto
+ORDER BY anio DESC, semana DESC, f.naviera, f.proveedor, puerto;
+
+-- ============================================================================
+-- VISTA: CNN_LLEGADA_CONTENEDORES_MENSUAL
+-- Acumulado mensual de llegada de contenedores por naviera, proveedor y puerto
+-- ============================================================================
+CREATE OR REPLACE VIEW cnn_llegada_contenedores_mensual AS
+SELECT
+    EXTRACT(YEAR FROM f.llegada_bquilla) AS anio,
+    EXTRACT(MONTH FROM f.llegada_bquilla) AS mes,
+    f.naviera,
+    f.proveedor,
+    f.llegada_bquilla AS puerto,
+    COUNT(*) AS total_contenedores
+FROM cnn_container_factura_view f
+WHERE f.llegada_bquilla IS NOT NULL
+GROUP BY anio, mes, f.naviera, f.proveedor, puerto
+ORDER BY anio DESC, mes DESC, f.naviera, f.proveedor, puerto;
 -- ============================================================================
 -- SUPABASE CONTAINER TRACKING DATABASE SCHEMA - PROYECTO CNN
 -- Script completo para ejecutar de una sola vez
