@@ -86,9 +86,40 @@ const ContainerTracking = () => {
     fetchData();
   }, []);
 
+  // Mapeo de estado real a categoría de filtro
+  function getTabCategory(estado: string | null | undefined): 'En Tránsito' | 'En Puerto' | 'Entregado' | 'Otros' {
+    if (!estado) return 'Otros';
+    const normalized = estado.toLowerCase();
+    if (
+      normalized.includes('tránsito') ||
+      normalized.includes('transito') ||
+      normalized.includes('en transito') ||
+      normalized.includes('en tránsito') ||
+      normalized.includes('export') ||
+      normalized.includes('cy') ||
+      normalized.includes('vacío al exportador') ||
+      normalized.includes('empty to shipper') ||
+      normalized.includes('recibido para exportación')
+    ) return 'En Tránsito';
+    if (
+      normalized.includes('puerto') ||
+      normalized.includes('port') ||
+      normalized.includes('llegó a puerto') ||
+      normalized.includes('arrived at port') ||
+      normalized.includes('descargado') ||
+      normalized.includes('discharged')
+    ) return 'En Puerto';
+    if (
+      normalized.includes('entregado') ||
+      normalized.includes('delivered')
+    ) return 'Entregado';
+    return 'Otros';
+  }
+
   const filteredFacturas = useMemo(() => {
     return facturas.filter(f => {
-      const inTab = activeTab === 'Todos' || f.estado === activeTab;
+      const tabCat = getTabCategory(f.estado);
+      const inTab = activeTab === 'Todos' || tabCat === activeTab;
       const inSearch = () => {
         const q = search.trim().toLowerCase();
         if (!q) return true;
@@ -105,9 +136,9 @@ const ContainerTracking = () => {
   }, [facturas, activeTab, search]);
 
   const counts = useMemo(() => ({
-    'En Tránsito': facturas.filter(f => f.estado === 'En Tránsito').length,
-    'En Puerto': facturas.filter(f => f.estado === 'En Puerto').length,
-    'Entregado': facturas.filter(f => f.estado === 'Entregado').length,
+    'En Tránsito': facturas.filter(f => getTabCategory(f.estado) === 'En Tránsito').length,
+    'En Puerto': facturas.filter(f => getTabCategory(f.estado) === 'En Puerto').length,
+    'Entregado': facturas.filter(f => getTabCategory(f.estado) === 'Entregado').length,
     'Todos': facturas.length
   }), [facturas]);
 

@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { useParams, Link } from 'react-router-dom';
 import { fetchContainerTrackingDetail } from '../api/fetchContainerTrackingDetail';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -54,8 +56,12 @@ const ContainerDetail: React.FC = () => {
         .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())
     : [];
 
+  // Siempre mostrar la POD ETA real como primer evento de la línea de tiempo
   const eventsWithETA = [...sortedEvents];
   if (tracking?.pod_eta_date && tracking?.shipped_to) {
+    // Eliminar cualquier otro evento ETA destino para evitar duplicados
+    const idx = eventsWithETA.findIndex(e => e.id === 'eta-destination');
+    if (idx !== -1) eventsWithETA.splice(idx, 1);
     eventsWithETA.unshift({
       id: 'eta-destination',
       event_date: tracking.pod_eta_date,
@@ -146,7 +152,21 @@ const ContainerDetail: React.FC = () => {
                         }
                       }
                       
-                      const dateStr = event.event_date ? new Date(event.event_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                      // Si es el evento ETA destino, mostrar la fecha formateada igual que los otros eventos
+                      let dateStr = '-';
+                      if (event.id === 'eta-destination' && tracking?.pod_eta_date) {
+                        try {
+                          dateStr = format(parseISO(tracking.pod_eta_date), "dd MMM yyyy", { locale: es });
+                        } catch {
+                          dateStr = tracking.pod_eta_date;
+                        }
+                      } else if (event.event_date) {
+                        try {
+                          dateStr = format(parseISO(event.event_date), "dd MMM yyyy", { locale: es });
+                        } catch {
+                          dateStr = event.event_date;
+                        }
+                      }
                       const description = event.event_description || event.event_type || 'Evento sin descripción';
                       const hasVessel = !!event.vessel_name;
                       const vesselImo = getImoForVessel(tracking.metadata, event.vessel_name);

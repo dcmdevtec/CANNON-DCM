@@ -109,12 +109,6 @@ const CollapsibleSidebar = () => {
       label="Administración"
       isCollapsed={isCollapsed}
     />
-      <SidebarNavLink
-        to="/datos-api"
-        icon={<Database className="h-6 w-6" />}
-        label="Datos API"
-        isCollapsed={isCollapsed}
-      />
   </nav>
 
   <div className="p-4 border-t border-gray-700">
