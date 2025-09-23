@@ -2,6 +2,26 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList, Legend } from 'recharts';
+import html2canvas from 'html2canvas';
+// Exportar ambos gráficos como imágenes PNG
+const exportCharts = async () => {
+  const chart1 = document.getElementById('chart-semanal');
+  const chart2 = document.getElementById('chart-mensual');
+  if (chart1) {
+    const canvas1 = await html2canvas(chart1);
+    const link1 = document.createElement('a');
+    link1.download = 'grafico_semanal.png';
+    link1.href = canvas1.toDataURL();
+    link1.click();
+  }
+  if (chart2) {
+    const canvas2 = await html2canvas(chart2);
+    const link2 = document.createElement('a');
+    link2.download = 'grafico_mensual.png';
+    link2.href = canvas2.toDataURL();
+    link2.click();
+  }
+};
 // Tooltip personalizado para gráfico semanal
 const CustomTooltipSemanal = ({ active, payload, label }: any) => {
   if (active && payload && payload.length && payload[0].payload) {
@@ -146,6 +166,12 @@ const Dashboard = () => {
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-3xl font-bold">Dashboard</h1>
+          <button
+            onClick={exportCharts}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold shadow"
+          >
+            Exportar
+          </button>
         </div>
         {/* Cards resumen */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -167,7 +193,7 @@ const Dashboard = () => {
         </div>
         <div className="flex flex-col gap-6 lg:flex-row lg:gap-4">
           {/* Gráfico semanal */}
-          <Card className="flex-1 min-w-[340px]">
+          <Card className="flex-1 min-w-[340px]" id="chart-semanal">
             <CardHeader className="flex flex-col items-start">
               <div className="mb-2 flex flex-wrap items-center gap-2 w-full">
                 <Select value={semanas.includes(semana) ? semana : '__all__'} onValueChange={v => setSemana(v === '__all__' ? '' : v)}>
@@ -200,7 +226,7 @@ const Dashboard = () => {
             <div className="text-center text-base font-semibold text-gray-700 mt-2">Semana</div>
           </Card>
           {/* Gráfico mensual */}
-          <Card className="flex-1 min-w-[340px]">
+          <Card className="flex-1 min-w-[340px]" id="chart-mensual">
             <CardHeader className="flex flex-col items-start">
               <div className="mb-2 flex flex-wrap items-center gap-2 w-full">
                 <Select value={meses.includes(mes) ? mes : '__all__'} onValueChange={v => setMes(v === '__all__' ? '' : v)}>

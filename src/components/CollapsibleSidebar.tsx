@@ -111,17 +111,6 @@ const CollapsibleSidebar = () => {
     />
   </nav>
 
-  <div className="p-4 border-t border-gray-700">
-    <Button
-      className={cn(
-        "w-full bg-blue-600 hover:bg-blue-700",
-        isCollapsed && "w-12 h-12 p-0"
-      )}
-    >
-      <Plus className="h-5 w-5" />
-      <span className={cn("ml-2", isCollapsed && "hidden")}>Añadir</span>
-    </Button>
-  </div>
 </aside>
 
   );
