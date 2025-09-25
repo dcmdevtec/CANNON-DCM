@@ -23,10 +23,38 @@ export async function fetchContainerTrackingDetail(containerNumber: string) {
     }
   }
 
-  // 2. Buscar eventos
+  // 2. Buscar eventos (traer todos los campos relevantes)
   const { data: events, error: eventsError } = await supabase
     .from("cnn_container_events")
-    .select("*")
+    .select(`
+      id,
+      container_tracking_id,
+      event_date,
+      event_time,
+      location,
+      port,
+      country,
+      event_type,
+      event_description,
+      vessel_name,
+      voyage_number,
+      terminal,
+      event_sequence,
+      is_estimated,
+      created_at,
+      updated_at,
+      metadata,
+      vessel_data,
+      event_datetime,
+      vessel_imo,
+      vessel_flag,
+      vessel_latitude,
+      vessel_longitude,
+      vessel_location,
+      vessel_type,
+      vessel_capacity,
+      vessel_last_update
+    `)
     .eq("container_tracking_id", tracking.id)
     .order("event_sequence", { ascending: true });
 

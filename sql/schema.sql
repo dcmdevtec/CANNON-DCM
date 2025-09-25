@@ -60,60 +60,114 @@ create table public.cnn_factura_tracking (
 -- ============================================================================
 -- 1. TABLA PRINCIPAL: CNN_CONTAINER_TRACKING
 -- ============================================================================
-CREATE TABLE CNN_container_tracking (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    container_number VARCHAR(20) NOT NULL,
-    bill_of_lading_number VARCHAR(50),
-    container_type VARCHAR(30),
-    shipped_from VARCHAR(100),
-    shipped_to VARCHAR(100),
-    port_of_load VARCHAR(100),
-    port_of_discharge VARCHAR(100),
-    current_status VARCHAR(100),
-    current_location VARCHAR(100),
-    latest_move VARCHAR(100),
-    pod_eta_date DATE,
-    price_calculation_date DATE,
-    is_delivered BOOLEAN DEFAULT false,
-    total_events INTEGER DEFAULT 0,
-    number_of_containers INTEGER DEFAULT 1,
-    tracking_type VARCHAR(20) DEFAULT 'Container',
-    tracking_date DATE,
-    transhipments TEXT[],
-    route_summary VARCHAR(200),
-    processing_timestamp TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    extracted_at TIMESTAMPTZ,
-    
-    CONSTRAINT chk_container_number_format CHECK (LENGTH(container_number) >= 10),
-    CONSTRAINT chk_tracking_type CHECK (tracking_type IN ('Container', 'Vessel', 'Bill'))
-);
+create table public.cnn_container_tracking (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  container_number character varying(20) not null,
+  bill_of_lading_number character varying(50) null,
+  container_type character varying(30) null,
+  shipped_from character varying(100) null,
+  shipped_to character varying(100) null,
+  port_of_load character varying(100) null,
+  port_of_discharge character varying(100) null,
+  current_status character varying(100) null,
+  current_location character varying(100) null,
+  latest_move character varying(100) null,
+  pod_eta_date date null,
+  price_calculation_date date null,
+  is_delivered boolean null default false,
+  total_events integer null default 0,
+  number_of_containers integer null default 1,
+  tracking_type character varying(20) null default 'Container'::character varying,
+  tracking_date date null,
+  transhipments json[] null,
+  route_summary character varying(200) null,
+  processing_timestamp timestamp with time zone null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  extracted_at timestamp with time zone null,
+  statistics jsonb null,
+  current_status_data jsonb null,
+  metadata jsonb null,
+  original_message jsonb null,
+  constraint cnn_container_tracking_pkey primary key (id),
+  constraint chk_container_number_format check ((length((container_number)::text) >= 10)),
+  constraint chk_tracking_type check (
+    (
+      (tracking_type)::text = any (
+        (
+          array[
+            'Container'::character varying,
+            'Vessel'::character varying,
+            'Bill'::character varying
+          ]
+        )::text[]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_tracking_number on public.cnn_container_tracking using btree (container_number) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_tracking_status on public.cnn_container_tracking using btree (current_status) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_tracking_eta on public.cnn_container_tracking using btree (pod_eta_date) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_tracking_delivered on public.cnn_container_tracking using btree (is_delivered) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_tracking_date on public.cnn_container_tracking using btree (tracking_date) TABLESPACE pg_default;
+
+create trigger update_cnn_container_tracking_updated_at BEFORE
+update on cnn_container_tracking for EACH row
+execute FUNCTION update_updated_at_column ();
 
 -- ============================================================================
 -- 2. TABLA: CNN_CONTAINER_EVENTS
 -- ============================================================================
-CREATE TABLE CNN_container_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    container_tracking_id UUID NOT NULL REFERENCES CNN_container_tracking(id) ON DELETE CASCADE,
-    event_date DATE,
-    event_time TIME,
-    location VARCHAR(100),
-    port VARCHAR(100),
-    country VARCHAR(5),
-    event_type VARCHAR(100),
-    event_description TEXT,
-    vessel_name VARCHAR(100),
-    voyage_number VARCHAR(50),
-    terminal VARCHAR(100),
-    event_sequence INTEGER,
-    is_estimated BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    CONSTRAINT chk_event_sequence_positive CHECK (event_sequence > 0),
-    CONSTRAINT chk_country_code CHECK (LENGTH(country) <= 5)
-);
+create table public.cnn_container_events (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  container_tracking_id uuid not null,
+  event_date date null,
+  event_time time without time zone null,
+  location character varying(100) null,
+  port character varying(100) null,
+  country character varying(5) null,
+  event_type character varying(100) null,
+  event_description text null,
+  vessel_name character varying(100) null,
+  voyage_number character varying(50) null,
+  terminal character varying(100) null,
+  event_sequence integer null,
+  is_estimated boolean null default false,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  metadata json null,
+  vessel_data json null,
+  event_datetime timestamp with time zone null,
+  vessel_imo text null,
+  vessel_flag character varying null,
+  vessel_latitude double precision null,
+  vessel_longitude double precision null,
+  vessel_location text null,
+  vessel_type text null,
+  vessel_capacity smallint null,
+  vessel_last_update timestamp with time zone null,
+  constraint cnn_container_events_pkey primary key (id),
+  constraint cnn_container_events_container_tracking_id_fkey foreign KEY (container_tracking_id) references cnn_container_tracking (id) on delete CASCADE,
+  constraint chk_event_sequence_positive check ((event_sequence > 0)),
+  constraint chk_country_code check ((length((country)::text) <= 5))
+) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_events_tracking_id on public.cnn_container_events using btree (container_tracking_id) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_events_date on public.cnn_container_events using btree (event_date) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_events_location on public.cnn_container_events using btree (location) TABLESPACE pg_default;
+
+create index IF not exists idx_cnn_container_events_sequence on public.cnn_container_events using btree (container_tracking_id, event_sequence) TABLESPACE pg_default;
+
+create trigger update_cnn_container_events_updated_at BEFORE
+update on cnn_container_events for EACH row
+execute FUNCTION update_updated_at_column ();
 
 -- ============================================================================
 -- 3. TABLA: CNN_CONTAINER_VESSELS
@@ -451,39 +505,77 @@ $upsert_func$ LANGUAGE plpgsql;
 -- VISTA: CNN_CONTAINER_FACTURA_VIEW
 -- Combina los campos principales de ambas tablas, priorizando datos en tiempo real
 -- ============================================================================
-CREATE OR REPLACE VIEW cnn_container_factura_view AS
-SELECT
-    f.id AS factura_id,
-    f.titulo,
-    f.proveedor,
-    f.contrato,
-    f.despacho,
-    f.num_contenedor,
-    f.contenedor,
-    -- ETD y ATD solo de factura
-    f.etd AS etd,
-    NULL AS atd, -- No hay campo atd en ninguna tabla
-    COALESCE(t.pod_eta_date, f.eta) AS eta,
-    f.llegada_bquilla,
-    f.factura,
-    COALESCE(t.current_status, f.estado) AS estado,
-    COALESCE(t.current_status, f.estado) AS estado_tracking,
-    COALESCE(t.current_location, NULL) AS ubicacion_actual,
-    COALESCE(t.current_status, NULL) AS status_tracking,
-    COALESCE(t.tracking_type, NULL) AS tracking_type,
-    COALESCE(t.tracking_date, NULL) AS tracking_date,
-    COALESCE(t.route_summary, NULL) AS route_summary,
-    COALESCE(t.transhipments, NULL) AS transhipments,
-    COALESCE(t.is_delivered, NULL) AS is_delivered,
-    COALESCE(t.total_events, NULL) AS total_events,
-    COALESCE(t.number_of_containers, NULL) AS number_of_containers,
-    f.naviera AS naviera
-FROM
-    cnn_factura_tracking f
-INNER JOIN
-    cnn_container_tracking t
-    ON t.container_number = f.num_contenedor;
-;
+create view public.cnn_container_factura_view as
+with
+  ranked as (
+    select
+      f.id as factura_id,
+      f.titulo,
+      f.proveedor,
+      f.contrato,
+      f.despacho,
+      f.num_contenedor,
+      f.contenedor,
+      f.etd,
+      null::text as atd,
+      COALESCE(t.pod_eta_date, f.eta) as eta,
+      f.llegada_bquilla,
+      f.factura,
+      COALESCE(t.current_status, f.estado) as estado,
+      COALESCE(t.current_status, f.estado) as estado_tracking,
+      COALESCE(t.current_location, null::character varying) as ubicacion_actual,
+      COALESCE(t.current_status, null::character varying) as status_tracking,
+      COALESCE(t.tracking_type, null::character varying) as tracking_type,
+      COALESCE(t.tracking_date, null::date) as tracking_date,
+      COALESCE(t.route_summary, null::character varying) as route_summary,
+      COALESCE(t.transhipments, null::json[]) as transhipments,
+      COALESCE(t.is_delivered, null::boolean) as is_delivered,
+      COALESCE(t.total_events, null::integer) as total_events,
+      COALESCE(t.number_of_containers, null::integer) as number_of_containers,
+      f.naviera,
+      t.created_at,
+      row_number() over (
+        partition by
+          f.num_contenedor,
+          f.contrato
+        order by
+          t.created_at desc
+      ) as rn
+    from
+      cnn_factura_tracking f
+      join cnn_container_tracking t on t.container_number::text = f.num_contenedor::text
+  )
+select
+  ranked.factura_id,
+  ranked.titulo,
+  ranked.proveedor,
+  ranked.contrato,
+  ranked.despacho,
+  ranked.num_contenedor,
+  ranked.contenedor,
+  ranked.etd,
+  ranked.atd,
+  ranked.eta,
+  ranked.llegada_bquilla,
+  ranked.factura,
+  ranked.estado,
+  ranked.estado_tracking,
+  ranked.ubicacion_actual,
+  ranked.status_tracking,
+  ranked.tracking_type,
+  ranked.tracking_date,
+  ranked.route_summary,
+  ranked.transhipments,
+  ranked.is_delivered,
+  ranked.total_events,
+  ranked.number_of_containers,
+  ranked.naviera,
+  ranked.created_at,
+  ranked.rn
+from
+  ranked
+where
+  ranked.rn = 1;
 -- ============================================================================
 
 -- Comentario de verificación

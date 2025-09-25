@@ -30,14 +30,10 @@ const ContainerDetail: React.FC = () => {
       .finally(() => setLoading(false));
   }, [containerNumber]);
 
-  const getImoForVessel = (metadata: any, vesselName: string): string | null => {
-    if (!metadata?.processing_notes || !vesselName) {
-      return null;
-    }
-    const notes = metadata.processing_notes;
-    const regex = new RegExp(`${vesselName.trim()}\\s*\\(IMO:\\s*(\\d+)\\)`);
-    const match = notes.match(regex);
-    return match ? match[1] : null;
+  // El IMO y otros datos de buque/ubicación ahora vienen directamente en el evento
+  const getImoForVessel = (event: any): string | null => {
+
+    return event.vessel_imo || null;
   };
 
   if (loading) {
@@ -50,15 +46,24 @@ const ContainerDetail: React.FC = () => {
 
   const { tracking, events, summary } = trackingData;
 
+  // Debug: ver qué llega en events
+  console.log('tra desde API:', trackingData);
   const sortedEvents = Array.isArray(events)
     ? [...events]
-        .filter(e => e.event_date)
-        .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())
+        .sort((a, b) => {
+          if (a.event_date && b.event_date) {
+            return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
+          }
+          if (a.event_date) return -1; // a tiene fecha, va antes
+          if (b.event_date) return 1;  // b tiene fecha, va antes
+          return 0;
+        })
     : [];
 
   // Siempre mostrar la POD ETA real como primer evento de la línea de tiempo
   const eventsWithETA = [...sortedEvents];
   if (tracking?.pod_eta_date && tracking?.shipped_to) {
+    console.log(trackingData);
     // Eliminar cualquier otro evento ETA destino para evitar duplicados
     const idx = eventsWithETA.findIndex(e => e.id === 'eta-destination');
     if (idx !== -1) eventsWithETA.splice(idx, 1);
@@ -136,6 +141,7 @@ const ContainerDetail: React.FC = () => {
                 <CardContent className="p-0">
                   <div className="relative px-4">
                     {eventsWithETA.map((event: any, idx: number) => {
+                      console.log('Evento:', event);
                       const eventKey = event.id || idx.toString();
                       const isMapVisible = activeMapEventId === eventKey;
                       const isFirst = idx === 0;
@@ -169,32 +175,72 @@ const ContainerDetail: React.FC = () => {
                       }
                       const description = event.event_description || event.event_type || 'Evento sin descripción';
                       const hasVessel = !!event.vessel_name;
-                      const vesselImo = getImoForVessel(tracking.metadata, event.vessel_name);
-
+                      const vesselImo = event.vessel_imo || null;
+                      const vesselLat = event.vessel_latitude;
+                      const vesselLon = event.vessel_longitude;
+                      const vesselLoc = event.vessel_location;
+                      const vesselFlag = event.vessel_flag;
+                      const vesselVoyage = event.voyage_number;
+                      // Solo permitir ubicación si el evento ya ocurrió (fecha <= hoy) y tiene IMO
+                      let isFutureEvent = false;
+                      if (event.event_date) {
+                        const eventDate = new Date(event.event_date);
+                        const today = new Date();
+                        eventDate.setHours(0,0,0,0);
+                        today.setHours(0,0,0,0);
+                        isFutureEvent = eventDate > today;
+                      }
+                      // Determinar si el evento es de llegada al destino
+                      const destino = (tracking?.shipped_to || '').toLowerCase().replace(/\s/g, '');
+                      const loc = (event.location || '').toLowerCase().replace(/\s/g, '');
+                      const esEventoEntrega = loc.includes(destino);
+                      // Determinar si el contenedor fue entregado (en cualquier evento)
+                      let entregado = false;
+                      if (Array.isArray(events)) {
+                        const eventosDestino = events.filter(ev => {
+                          const l = (ev.location || '').toLowerCase().replace(/\s/g, '');
+                          if (!l.includes(destino)) return false;
+                          if (!ev.event_date) return false;
+                          const eventDate = new Date(ev.event_date);
+                          const today = new Date();
+                          eventDate.setHours(0,0,0,0);
+                          today.setHours(0,0,0,0);
+                          return eventDate <= today;
+                        });
+                        if (eventosDestino.length > 0) {
+                          entregado = true;
+                        }
+                      }
+                      // Si es el evento de llegada al destino y fue entregado, mostrarlo colorido
+                      const canShowLocation = !!vesselImo && (!isFutureEvent || (entregado && esEventoEntrega));
+                      // Estilos negativos para eventos futuros o sin ubicación, excepto si es el evento de entrega
+                      const negativeStyle = (!canShowLocation && !(entregado && esEventoEntrega)) ? 'opacity-60 grayscale' : '';
+                      const negativeText = (!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-400' : '';
+                      const negativeIcon = (!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-300' : '';
                       return (
-                        <div key={eventKey} className="relative grid grid-cols-[4rem_1fr] pb-8">
-                          {!isLast && <div className="absolute left-8 top-10 h-full w-0.5 bg-gray-200" />}
-                          
+                        <div key={eventKey} className={`relative grid grid-cols-[4rem_1fr] pb-8 ${negativeStyle}`}>
+                          {!isLast && <div className={`absolute left-8 top-10 h-full w-0.5 ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'bg-gray-100' : 'bg-gray-200'}`} />}
                           <div className="flex justify-center pt-1">
-                            <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-md z-10 ${getIconBgClass(event, isFirst)}`}>
-                              {getEventIcon(event, isFirst, isLast)}
+                            <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-md z-10 ${getIconBgClass(event, isFirst)} ${negativeStyle}`}>
+                              <span className={negativeIcon}>{getEventIcon(event, isFirst, isLast)}</span>
                             </div>
                           </div>
-
                           <div className="pl-4">
                             <div className="grid grid-cols-1 md:grid-cols-[1fr_10rem] gap-x-4 gap-y-2">
                               <div>
-                                <p className="font-semibold text-gray-800">{description}</p>
-                                <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                                  {countryCode && <ReactCountryFlag countryCode={countryCode} svg style={{ width: '18px', height: '12px' }} />}
+                                <p className={`font-semibold ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-400' : 'text-gray-800'}`}>{description}</p>
+                                <div className={`flex items-center gap-2 text-sm ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-300' : 'text-gray-500'} mt-1`}>
+                                  {countryCode && <ReactCountryFlag countryCode={countryCode} svg style={{ width: '18px', height: '12px', filter: (!canShowLocation && !(entregado && esEventoEntrega)) ? 'grayscale(1) opacity(0.6)' : undefined }} />}
                                   <span>{locationDisplay}</span>
                                   <span className="text-gray-300">|</span>
                                   <span>{dateStr}</span>
                                 </div>
                               </div>
                               <div className="text-left md:text-right">
-                                <p className="font-medium text-sm text-blue-700">{event.vessel_name || '-'}</p>
-                                {event.vessel_voyage && <p className="text-xs text-gray-500">Viaje: {event.vessel_voyage}</p>}
+                                <p className={`font-medium text-sm ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-400' : 'text-blue-700'}`}>{event.vessel_name || '-'}</p>
+                                {vesselVoyage && <p className={`text-xs ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-300' : 'text-gray-500'}`}>Viaje: {vesselVoyage}</p>}
+                                {vesselImo && <p className={`text-xs ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-300' : 'text-gray-500'}`}>IMO: {vesselImo}</p>}
+                                {vesselFlag && <p className={`text-xs ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-300' : 'text-gray-500'}`}>Bandera: {vesselFlag}</p>}
                                 {hasVessel && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -202,29 +248,40 @@ const ContainerDetail: React.FC = () => {
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          className="mt-1 text-xs h-auto py-1 px-2 text-primary hover:bg-primary/10"
-                                          onClick={() => setActiveMapEventId(isMapVisible ? null : eventKey)}
-                                          disabled={!vesselImo}
+                                          className={`mt-1 text-xs h-auto py-1 px-2 ${canShowLocation || (entregado && esEventoEntrega) ? 'text-primary hover:bg-primary/10' : 'text-gray-400 opacity-60 cursor-not-allowed'}`}
+                                          onClick={() => (canShowLocation || (entregado && esEventoEntrega)) && setActiveMapEventId(isMapVisible ? null : eventKey)}
+                                          disabled={!(canShowLocation || (entregado && esEventoEntrega))}
                                         >
-                                          <MapPin className="h-3 w-3 mr-1.5" />
-                                          {isMapVisible ? 'Ocultar Mapa' : 'Ver Ubicación'}
+                                          <MapPin className={`h-3 w-3 mr-1.5 ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-300' : ''}`} />
+                                          {(canShowLocation || (entregado && esEventoEntrega)) ? (isMapVisible ? 'Ocultar Mapa' : 'Ver Ubicación') : 'Ubicación no disponible'}
                                         </Button>
                                       </span>
                                     </TooltipTrigger>
-                                    {!vesselImo && (
+                                    {!(canShowLocation || (entregado && esEventoEntrega)) && (
                                       <TooltipContent>
-                                        <p>IMO no disponible para este buque.</p>
+                                        <p>
+                                          {isFutureEvent
+                                            ? 'El buque aún no ha llegado a este punto.'
+                                            : 'IMO no disponible para este buque.'}
+                                        </p>
                                       </TooltipContent>
                                     )}
                                   </Tooltip>
                                 )}
                               </div>
                             </div>
-                            {description.toLowerCase().includes('transshipment') && <Badge variant="outline" className="mt-2">Transbordo</Badge>}
-                            {description.toLowerCase().includes('en tránsito') && <Badge variant="outline" className="mt-2 bg-blue-50 text-blue-700 border-blue-200">En Tránsito</Badge>}
+                            {description.toLowerCase().includes('transshipment') && <Badge variant="outline" className={`mt-2 ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'opacity-60 grayscale' : ''}`}>Transbordo</Badge>}
+                            {description.toLowerCase().includes('en tránsito') && <Badge variant="outline" className={`mt-2 bg-blue-50 border-blue-200 ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-blue-200 opacity-60 grayscale' : 'text-blue-700'}`}>En Tránsito</Badge>}
                             {isMapVisible && vesselImo && (
                               <div className="mt-4">
                                 <VesselFinderEmbed imo={vesselImo} />
+                                {(vesselLat || vesselLon || vesselLoc) && (
+                                  <div className="text-xs text-gray-500 mt-2">
+                                    {vesselLat && <>Lat: {vesselLat} </>}
+                                    {vesselLon && <>Lon: {vesselLon} </>}
+                                    {vesselLoc && <>Posición: {vesselLoc}</>}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -244,7 +301,33 @@ const ContainerDetail: React.FC = () => {
                 <CardContent className="p-5 space-y-3 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">Estado:</span>
-                    <Badge>{tracking?.current_status || 'Vacío'}</Badge>
+                    <Badge>
+                      {(() => {
+                        // Solo marcar como entregado si hay evento de llegada al destino y la fecha del evento es hoy o anterior
+                        const destino = (tracking?.shipped_to || '').toLowerCase().replace(/\s/g, '');
+                        let entregado = false;
+                        if (Array.isArray(events)) {
+                          const eventosDestino = events.filter(ev => {
+                            const loc = (ev.location || '').toLowerCase().replace(/\s/g, '');
+                            if (!loc.includes(destino)) return false;
+                            // Validar que la fecha del evento no sea futura
+                            if (!ev.event_date) return false;
+                            const eventDate = new Date(ev.event_date);
+                            const today = new Date();
+                            eventDate.setHours(0,0,0,0);
+                            today.setHours(0,0,0,0);
+                            return eventDate <= today;
+                          });
+                          if (eventosDestino.length > 0) {
+                            entregado = true;
+                          }
+                        }
+                        if (entregado) {
+                          return 'Entregado';
+                        }
+                        return tracking?.current_status || 'Vacío';
+                      })()}
+                    </Badge>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">Origen:</span>

@@ -87,8 +87,9 @@ const ContainerTracking = () => {
   }, []);
 
   // Mapeo de estado real a categoría de filtro
-  function getTabCategory(estado: string | null | undefined): 'En Tránsito' | 'En Puerto' | 'Entregado' | 'Otros' {
-    if (!estado) return 'Otros';
+  function getTabCategory(row: any): 'En Tránsito' | 'En Puerto' | 'Entregado' | 'Otros' {
+    if (row.entregado) return 'Entregado';
+    const estado = row.estado || '';
     const normalized = estado.toLowerCase();
     if (
       normalized.includes('tránsito') ||
@@ -109,16 +110,16 @@ const ContainerTracking = () => {
       normalized.includes('descargado') ||
       normalized.includes('discharged')
     ) return 'En Puerto';
-    if (
-      normalized.includes('entregado') ||
-      normalized.includes('delivered')
-    ) return 'Entregado';
     return 'Otros';
   }
 
+  // Paginación
+  const ROWS_PER_PAGE = 20;
+  const [page, setPage] = useState(1);
   const filteredFacturas = useMemo(() => {
+    setPage(1); // Reinicia a la página 1 si cambian los filtros
     return facturas.filter(f => {
-      const tabCat = getTabCategory(f.estado);
+      const tabCat = getTabCategory(f);
       const inTab = activeTab === 'Todos' || tabCat === activeTab;
       const inSearch = () => {
         const q = search.trim().toLowerCase();
@@ -135,10 +136,16 @@ const ContainerTracking = () => {
     });
   }, [facturas, activeTab, search]);
 
+  const totalPages = Math.ceil(filteredFacturas.length / ROWS_PER_PAGE) || 1;
+  const paginatedFacturas = useMemo(() => {
+    const start = (page - 1) * ROWS_PER_PAGE;
+    return filteredFacturas.slice(start, start + ROWS_PER_PAGE);
+  }, [filteredFacturas, page]);
+
   const counts = useMemo(() => ({
-    'En Tránsito': facturas.filter(f => getTabCategory(f.estado) === 'En Tránsito').length,
-    'En Puerto': facturas.filter(f => getTabCategory(f.estado) === 'En Puerto').length,
-    'Entregado': facturas.filter(f => getTabCategory(f.estado) === 'Entregado').length,
+    'En Tránsito': facturas.filter(f => getTabCategory(f) === 'En Tránsito').length,
+    'En Puerto': facturas.filter(f => getTabCategory(f) === 'En Puerto').length,
+    'Entregado': facturas.filter(f => getTabCategory(f) === 'Entregado').length,
     'Todos': facturas.length
   }), [facturas]);
 
@@ -226,7 +233,7 @@ const ContainerTracking = () => {
             {loading ? (
               <TableRow><TableCell colSpan={13} className="text-center">Cargando...</TableCell></TableRow>
             ) : (
-              filteredFacturas.map((row) => {
+              paginatedFacturas.map((row) => {
                 const { progress, elapsed, total, isError } = calculateProgress(row.etd, row.eta);
                 return (
                   <TableRow key={row.num_contenedor} className={contractColorMap.get(row.num_contenedor)}>
@@ -240,21 +247,19 @@ const ContainerTracking = () => {
                       <div className="text-xs text-[#6b7280]">{row.contenedor}</div>
                     </TableCell>
                     <TableCell>{formatDate(row.etd)}</TableCell>
-                 
                     <TableCell>{formatDate(row.eta)}</TableCell>
                     <TableCell>
                       {!isError && <TransitProgressBar progress={progress} elapsedDays={elapsed} totalDays={total} />}
                     </TableCell>
                     <TableCell>{row.factura}</TableCell>
                     <TableCell>{row.naviera}</TableCell>
-                    <TableCell>{translateStatus(row.estado)}</TableCell>
                     <TableCell>
-                      <span className="inline-flex gap-2">
-                        <button title="Ver" onClick={() => navigate(`/container-detail/${row.num_contenedor}`)} className="hover:bg-gray-100 rounded-full p-1">
-                          <svg width="18" height="18" fill="none" stroke="#222" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2.05 12a9.94 9.94 0 0 1 19.9 0 9.94 9.94 0 0 1-19.9 0Z"/></svg>
-                        </button>
-                        <span title="Ubicación"><svg width="18" height="18" fill="none" stroke="#e11d48" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z"/></svg></span>
-                      </span>
+                      {row.entregado ? 'Entregado' : translateStatus(row.estado)}
+                    </TableCell>
+                    <TableCell>
+                      <button title="Ver detalle" onClick={() => navigate(`/container-detail/${row.num_contenedor}`)} className="hover:bg-gray-100 rounded-full p-1">
+                        <svg width="18" height="18" fill="none" stroke="#e11d48" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z"/></svg>
+                      </button>
                     </TableCell>
                   </TableRow>
                 );
@@ -262,6 +267,20 @@ const ContainerTracking = () => {
             )}
           </TableBody>
         </Table>
+      </div>
+      {/* Paginación */}
+      <div className="flex items-center justify-center gap-2 mt-4">
+        <button
+          className="px-3 py-1 rounded border bg-white disabled:opacity-50"
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          disabled={page === 1}
+        >Anterior</button>
+        <span className="font-semibold">Página {page} de {totalPages}</span>
+        <button
+          className="px-3 py-1 rounded border bg-white disabled:opacity-50"
+          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+          disabled={page === totalPages}
+        >Siguiente</button>
       </div>
     </div>
   );
