@@ -137,26 +137,55 @@ const Dashboard = () => {
   const [proveedorGlobal, setProveedorGlobal] = useState('');
   const [navieraGlobal, setNavieraGlobal] = useState('');
 
-  // Filtrado de datos según selects
-  const semanalFiltrado = useMemo(() => semanal.filter(x =>
-    (!navieraS || x.naviera === navieraS)
-    && (!proveedorS || x.proveedor === proveedorS)
-    && (!puertoS || x.puerto === puertoS)
-    && (!semana || String(x.semana) === semana)
-    && (!anioS || String(x.anio) === anioS)
-    && (!proveedorGlobal || x.proveedor === proveedorGlobal)
-    && (!navieraGlobal || x.naviera === navieraGlobal)
-  ), [semanal, navieraS, proveedorS, puertoS, semana, anioS, proveedorGlobal, navieraGlobal]);
 
-  const mensualFiltrado = useMemo(() => mensual.filter(x =>
-    (!navieraM || x.naviera === navieraM)
-    && (!proveedorM || x.proveedor === proveedorM)
-    && (!puertoM || x.puerto === puertoM)
-    && (!mes || String(x.mes) === mes)
-    && (!anioM || String(x.anio) === anioM)
-    && (!proveedorGlobal || x.proveedor === proveedorGlobal)
-    && (!navieraGlobal || x.naviera === navieraGlobal)
-  ), [mensual, navieraM, proveedorM, puertoM, mes, anioM, proveedorGlobal, navieraGlobal]);
+  // Filtrado y agrupación de datos por semana (sumando contenedores de semanas repetidas)
+  const semanalFiltrado = useMemo(() => {
+    // Filtrar primero
+    const filtrados = semanal.filter(x =>
+      (!navieraS || x.naviera === navieraS)
+      && (!proveedorS || x.proveedor === proveedorS)
+      && (!puertoS || x.puerto === puertoS)
+      && (!semana || String(x.semana) === semana)
+      && (!anioS || String(x.anio) === anioS)
+      && (!proveedorGlobal || x.proveedor === proveedorGlobal)
+      && (!navieraGlobal || x.naviera === navieraGlobal)
+    );
+    // Agrupar por semana y sumar espacios_usados
+    const agrupado: Record<string, any> = {};
+    filtrados.forEach(item => {
+      const key = String(item.semana);
+      if (!agrupado[key]) {
+        agrupado[key] = { ...item, espacios_usados: 0 };
+      }
+      agrupado[key].espacios_usados += parseInt(item.espacios_usados) || 0;
+    });
+    // Si hay más de un registro por semana, mantener el resto de campos del primero
+    return Object.values(agrupado);
+  }, [semanal, navieraS, proveedorS, puertoS, semana, anioS, proveedorGlobal, navieraGlobal]);
+
+
+  // Filtrado y agrupación de datos por mes (sumando total_contenedores de meses repetidos)
+  const mensualFiltrado = useMemo(() => {
+    const filtrados = mensual.filter(x =>
+      (!navieraM || x.naviera === navieraM)
+      && (!proveedorM || x.proveedor === proveedorM)
+      && (!puertoM || x.puerto === puertoM)
+      && (!mes || String(x.mes) === mes)
+      && (!anioM || String(x.anio) === anioM)
+      && (!proveedorGlobal || x.proveedor === proveedorGlobal)
+      && (!navieraGlobal || x.naviera === navieraGlobal)
+    );
+    // Agrupar por mes y sumar total_contenedores
+    const agrupado: Record<string, any> = {};
+    filtrados.forEach(item => {
+      const key = String(item.mes);
+      if (!agrupado[key]) {
+        agrupado[key] = { ...item, total_contenedores: 0 };
+      }
+      agrupado[key].total_contenedores += parseInt(item.total_contenedores) || 0;
+    });
+    return Object.values(agrupado);
+  }, [mensual, navieraM, proveedorM, puertoM, mes, anioM, proveedorGlobal, navieraGlobal]);
 
   // Eliminar cualquier referencia a variables viejas
 
