@@ -80,10 +80,35 @@ const ContainerDetail: React.FC = () => {
     const description = (event.event_description || event.event_type || '').toLowerCase();
     const isFuture = event.isETA && new Date(event.event_date) > new Date();
 
-    // Evento de llegada al destino y entregado: círculo verde animado
+    // Evento de llegada al destino y entregado: círculo verde animado, inner blanco
     if (entregado && esEventoEntrega) {
-      return <div className="w-10 h-10 rounded-full border-2 border-green-500 bg-green-500 flex items-center justify-center animate-pulse"><div className="w-3 h-3 bg-green-200 rounded-full" /></div>;
+      return (
+        <div
+          className="w-10 h-10 rounded-full border-2 animate-pulse-green"
+          style={{ backgroundColor: '#10b981', borderColor: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <div className="w-3 h-3 bg-white rounded-full" />
+        </div>
+      );
     }
+
+// Animación personalizada para el círculo verde de entrega
+if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')) {
+  const style = document.createElement('style');
+  style.id = 'pulseGreenStyle';
+  style.innerHTML = `
+    @keyframes pulse-green {
+      0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
+      100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    }
+    .animate-pulse-green {
+      animation: pulse-green 1.4s cubic-bezier(0.4,0,0.6,1) infinite;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
     if (isFuture) return <Clock className="h-6 w-6 text-white" />;
     if (event.isETA) return <CheckCircle className="h-6 w-6 text-white" />;
     if (isFirst) return <div className="w-3 h-3 bg-white rounded-full animate-pulse" />;
@@ -127,13 +152,23 @@ const ContainerDetail: React.FC = () => {
               </div>
               <div className="text-left sm:text-right">
                 <span className="text-xs text-muted-foreground font-medium">Último Movimiento</span>
-                <p className="font-semibold text-lg text-gray-900">
-                  {(() => {
-                    // Buscar el primer evento real (no ETA) en la línea de tiempo
-                    const ultimoEvento = eventsWithETA.find(e => !e.isETA);
-                    return (ultimoEvento?.event_description || ultimoEvento?.event_type || tracking.latest_move || 'Empty to Shipper');
-                  })()}
-                </p>
+                {(() => {
+                  // Buscar el primer evento real (no ETA) en la línea de tiempo
+                  const ultimoEvento = eventsWithETA.find(e => !e.isETA);
+                  const lugar = ultimoEvento?.location || '-';
+                  const descripcion = ultimoEvento?.event_description || ultimoEvento?.event_type || tracking.latest_move || 'Empty to Shipper';
+                  return (
+                    <>
+                      <div className="font-bold text-lg text-gray-900 flex items-center gap-1 justify-end">
+                        <MapPin className="inline-block h-5 w-5 text-blue-600 mr-1" />
+                        {lugar}
+                      </div>
+                      <div className="text-xs text-gray-500 flex items-center gap-1 justify-end mt-1">
+                        {descripcion}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
               <div className="text-left sm:text-right">
                 <span className="text-xs text-muted-foreground font-medium">POD ETA</span>
