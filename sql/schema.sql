@@ -540,7 +540,20 @@ with
           f.contrato
         order by
           t.created_at desc
-      ) as rn
+      ) as rn,
+      -- Columna calculada: entregado
+      EXISTS (
+        SELECT 1
+        FROM cnn_container_events e
+        WHERE
+          e.container_tracking_id = t.id
+          AND e.location IS NOT NULL
+          AND t.shipped_to IS NOT NULL
+          AND LOWER(TRIM(e.location)) = LOWER(TRIM(t.shipped_to))
+          AND e.event_date IS NOT NULL
+          AND e.event_date <= CURRENT_DATE
+        LIMIT 1
+      ) AS entregado
     from
       cnn_factura_tracking f
       join cnn_container_tracking t on t.container_number::text = f.num_contenedor::text
@@ -571,7 +584,8 @@ select
   ranked.number_of_containers,
   ranked.naviera,
   ranked.created_at,
-  ranked.rn
+  ranked.rn,
+  ranked.entregado
 from
   ranked
 where

@@ -76,10 +76,14 @@ const ContainerDetail: React.FC = () => {
     });
   }
 
-  const getEventIcon = (event: any, isFirst: boolean, isLast: boolean) => {
+  const getEventIcon = (event: any, isFirst: boolean, isLast: boolean, entregado?: boolean, esEventoEntrega?: boolean) => {
     const description = (event.event_description || event.event_type || '').toLowerCase();
     const isFuture = event.isETA && new Date(event.event_date) > new Date();
 
+    // Evento de llegada al destino y entregado: círculo verde animado
+    if (entregado && esEventoEntrega) {
+      return <div className="w-10 h-10 rounded-full border-2 border-green-500 bg-green-500 flex items-center justify-center animate-pulse"><div className="w-3 h-3 bg-green-200 rounded-full" /></div>;
+    }
     if (isFuture) return <Clock className="h-6 w-6 text-white" />;
     if (event.isETA) return <CheckCircle className="h-6 w-6 text-white" />;
     if (isFirst) return <div className="w-3 h-3 bg-white rounded-full animate-pulse" />;
@@ -123,7 +127,13 @@ const ContainerDetail: React.FC = () => {
               </div>
               <div className="text-left sm:text-right">
                 <span className="text-xs text-muted-foreground font-medium">Último Movimiento</span>
-                <p className="font-semibold text-lg text-gray-900">{tracking.latest_move || 'Empty to Shipper'}</p>
+                <p className="font-semibold text-lg text-gray-900">
+                  {(() => {
+                    // Buscar el primer evento real (no ETA) en la línea de tiempo
+                    const ultimoEvento = eventsWithETA.find(e => !e.isETA);
+                    return (ultimoEvento?.event_description || ultimoEvento?.event_type || tracking.latest_move || 'Empty to Shipper');
+                  })()}
+                </p>
               </div>
               <div className="text-left sm:text-right">
                 <span className="text-xs text-muted-foreground font-medium">POD ETA</span>
@@ -222,7 +232,7 @@ const ContainerDetail: React.FC = () => {
                           {!isLast && <div className={`absolute left-8 top-10 h-full w-0.5 ${(!canShowLocation && !(entregado && esEventoEntrega)) ? 'bg-gray-100' : 'bg-gray-200'}`} />}
                           <div className="flex justify-center pt-1">
                             <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-md z-10 ${getIconBgClass(event, isFirst)} ${negativeStyle}`}>
-                              <span className={negativeIcon}>{getEventIcon(event, isFirst, isLast)}</span>
+                              <span className={negativeIcon}>{getEventIcon(event, isFirst, isLast, entregado, esEventoEntrega)}</span>
                             </div>
                           </div>
                           <div className="pl-4">
