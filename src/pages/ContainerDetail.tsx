@@ -346,33 +346,31 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                 <CardContent className="p-5 space-y-3 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">Estado:</span>
-                    <Badge>
-                      {(() => {
-                        // Solo marcar como entregado si hay evento de llegada al destino y la fecha del evento es hoy o anterior
-                        const destino = (tracking?.shipped_to || '').toLowerCase().replace(/\s/g, '');
-                        let entregado = false;
-                        if (Array.isArray(events)) {
-                          const eventosDestino = events.filter(ev => {
-                            const loc = (ev.location || '').toLowerCase().replace(/\s/g, '');
-                            if (!loc.includes(destino)) return false;
-                            // Validar que la fecha del evento no sea futura
-                            if (!ev.event_date) return false;
-                            const eventDate = new Date(ev.event_date);
-                            const today = new Date();
-                            eventDate.setHours(0,0,0,0);
-                            today.setHours(0,0,0,0);
-                            return eventDate <= today;
-                          });
-                          if (eventosDestino.length > 0) {
-                            entregado = true;
-                          }
+                    {(() => {
+                      // Solo marcar como entregado si hay evento de llegada al destino y la fecha del evento es hoy o anterior
+                      const destino = (tracking?.shipped_to || '').toLowerCase().replace(/\s/g, '');
+                      let entregado = false;
+                      if (Array.isArray(events)) {
+                        const eventosDestino = events.filter(ev => {
+                          const loc = (ev.location || '').toLowerCase().replace(/\s/g, '');
+                          if (!loc.includes(destino)) return false;
+                          // Validar que la fecha del evento no sea futura
+                          if (!ev.event_date) return false;
+                          const eventDate = new Date(ev.event_date);
+                          const today = new Date();
+                          eventDate.setHours(0,0,0,0);
+                          today.setHours(0,0,0,0);
+                          return eventDate <= today;
+                        });
+                        if (eventosDestino.length > 0) {
+                          entregado = true;
                         }
-                        if (entregado) {
-                          return 'Entregado';
-                        }
-                        return tracking?.current_status || 'Vacío';
-                      })()}
-                    </Badge>
+                      }
+                      if (entregado) {
+                        return <Badge style={{backgroundColor: '#10b981', color: 'white', border: 'none'}}>Entregado</Badge>;
+                      }
+                      return <Badge>{tracking?.current_status || 'Vacío'}</Badge>;
+                    })()}
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">Origen:</span>
