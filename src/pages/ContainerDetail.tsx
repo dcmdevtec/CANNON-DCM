@@ -60,21 +60,8 @@ const ContainerDetail: React.FC = () => {
         })
     : [];
 
-  // Siempre mostrar la POD ETA real como primer evento de la línea de tiempo
+  // Usar solo los eventos originales, sin agregar manualmente el ETA destino
   const eventsWithETA = [...sortedEvents];
-  if (tracking?.pod_eta_date && tracking?.shipped_to) {
-    console.log(trackingData);
-    // Eliminar cualquier otro evento ETA destino para evitar duplicados
-    const idx = eventsWithETA.findIndex(e => e.id === 'eta-destination');
-    if (idx !== -1) eventsWithETA.splice(idx, 1);
-    eventsWithETA.unshift({
-      id: 'eta-destination',
-      event_date: tracking.pod_eta_date,
-      location: tracking.shipped_to,
-      event_description: 'Llegada Estimada a Destino Final',
-      isETA: true,
-    });
-  }
 
   const getEventIcon = (event: any, isFirst: boolean, isLast: boolean, entregado?: boolean, esEventoEntrega?: boolean) => {
     const description = (event.event_description || event.event_type || '').toLowerCase();

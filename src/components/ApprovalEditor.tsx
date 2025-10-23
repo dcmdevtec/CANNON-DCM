@@ -1,6 +1,15 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { ApprovalItem } from '@/pages/ApprovalQueue';
+// Local type for ApprovalItem (avoid circular type import)
+export type ApprovalItem = {
+  id: string;
+  received_at: string;
+  sender: string;
+  subject: string;
+  body_text: string;
+  extracted_data: Record<string, any>;
+  status: 'pending' | 'approved' | 'rejected';
+};
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +33,7 @@ const keyTranslations: { [key: string]: string } = {
 };
 
 const ApprovalEditor = ({ approvalItem, onApprovalUpdate }: ApprovalEditorProps) => {
-  const [editedData, setEditedData] = useState(approvalItem.extracted_data);
+  const [editedData, setEditedData] = useState<Record<string, any>>(approvalItem.extracted_data || {});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rejectionComment, setRejectionComment] = useState('');
 
@@ -123,7 +132,7 @@ const ApprovalEditor = ({ approvalItem, onApprovalUpdate }: ApprovalEditorProps)
                     </div>
                     <Input
                       id={key}
-                      value={value || ''}
+                      value={String(value ?? '')}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                     />
                   </div>
