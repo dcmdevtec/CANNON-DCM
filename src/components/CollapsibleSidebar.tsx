@@ -55,7 +55,7 @@ const CollapsibleSidebar = () => {
       {isCollapsed ? (
         // Logo solo cañón
         <img
-          src="lo.png"
+          src="/lo.png"
           alt="Cañón"
       className="h-full w-auto transition-all duration-300"
          
@@ -63,7 +63,7 @@ const CollapsibleSidebar = () => {
       ) : (
         // Logo completo
         <img
-          src="logo.png"
+          src="/logo.png"
           alt="Cannon Logo"
           className=" w-auto transition-all duration-300"
         />

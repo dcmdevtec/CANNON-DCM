@@ -594,3 +594,21 @@ where
 
 -- Comentario de verificación
 SELECT 'CNN Container Tracking Schema creado exitosamente!' as status;
+create table public.cnn_correo_tracking (
+  id serial not null,
+  titulo character varying(50) null,
+  proveedor character varying(100) null,
+  contrato character varying(50) null,
+  despacho character varying(50) null,
+  num_contenedor character varying(20) null,
+  llegada_bquilla date null,
+  contenedor character varying(20) null,
+  estado character varying(100) null,
+  naviera character varying(50) null,
+  factura character varying(50) null,
+  etd date null,
+  eta date null,
+  created_at timestamp without time zone null default CURRENT_TIMESTAMP,
+  container_info_id integer null,
+  constraint cnn_correo_tracking_pkey primary key (id)
+) TABLESPACE pg_default;

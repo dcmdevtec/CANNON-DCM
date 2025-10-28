@@ -96,9 +96,32 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
   document.head.appendChild(style);
 }
 
+    const eventDate = event.event_date ? new Date(event.event_date) : null;
+    const today = new Date();
+    const isPastEvent = eventDate ? eventDate <= today : true;
+    
     if (isFuture) return <Clock className="h-6 w-6 text-white" />;
     if (event.isETA) return <CheckCircle className="h-6 w-6 text-white" />;
     if (isFirst) return <div className="w-3 h-3 bg-white rounded-full animate-pulse" />;
+    
+    // Si es un evento pasado, usar iconos naranjas
+    if (isPastEvent) {
+      if (description.includes('loaded') || description.includes('discharged') || description.includes('transshipment')) {
+        return <Ship className="h-5 w-5 text-orange-500" />;
+      }
+      if (description.includes('received')) {
+        return <Package className="h-5 w-5 text-orange-500" />;
+      }
+      if (description.includes('empty')) {
+        return <Circle className="h-5 w-5 text-orange-500" />;
+      }
+      if (isLast) {
+        return <ArrowRight className="h-5 w-5 text-orange-500" />;
+      }
+      return <Anchor className="h-5 w-5 text-orange-500" />;
+    }
+    
+    // Eventos no pasados mantienen sus colores originales
     if (description.includes('loaded') || description.includes('discharged') || description.includes('transshipment')) return <Ship className="h-5 w-5 text-orange-600" />;
     if (description.includes('received')) return <Package className="h-5 w-5 text-blue-600" />;
     if (description.includes('empty')) return <Circle className="h-5 w-5 text-gray-500" />;
@@ -108,14 +131,34 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
 
   const getIconBgClass = (event: any, isFirst: boolean) => {
     const description = (event.event_description || event.event_type || '').toLowerCase();
-    const isFuture = event.isETA && new Date(event.event_date) > new Date();
+    const eventDate = event.event_date ? new Date(event.event_date) : null;
+    const today = new Date();
+    const isPastEvent = eventDate ? eventDate <= today : true; // Si no hay fecha, asumimos que ya pasó
+    const location = (event.location || '').toLowerCase();
 
-    if (isFuture) return 'border-blue-500 bg-blue-500 animate-pulse';
+    // Eventos futuros
+    if (!isPastEvent && event.isETA) return 'border-blue-500 bg-blue-500 animate-pulse';
+    
+    // Eventos pasados
+    if (isPastEvent) {
+      // Eventos de transbordo y carga/descarga
+      if (description.includes('loaded') || description.includes('discharged') || description.includes('transshipment')) {
+        return 'border-orange-500 bg-orange-100';
+      }
+      // Eventos con ubicación n/a
+      if (location === 'n/a' || !event.location) {
+        return 'border-orange-500 bg-orange-100';
+      }
+      // Otros eventos pasados
+      return 'border-orange-500 bg-orange-100';
+    }
+
+    // Eventos especiales
     if (event.isETA) return 'border-green-500 bg-green-500';
     if (isFirst) return 'border-blue-500 bg-blue-500';
-    if (description.includes('loaded') || description.includes('discharged') || description.includes('transshipment')) return 'border-orange-500 bg-orange-100';
     if (description.includes('received')) return 'border-blue-400 bg-blue-100';
     if (description.includes('empty')) return 'border-gray-400 bg-gray-100';
+    
     return 'border-gray-300 bg-white';
   };
 
@@ -243,10 +286,16 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                           entregado = true;
                         }
                       }
-                      // Si es el evento de llegada al destino y fue entregado, mostrarlo colorido
-                      const canShowLocation = !!vesselImo && (!isFutureEvent || (entregado && esEventoEntrega));
-                      // Estilos negativos para eventos futuros o sin ubicación, excepto si es el evento de entrega
-                      const negativeStyle = (!canShowLocation && !(entregado && esEventoEntrega)) ? 'opacity-60 grayscale' : '';
+                      // Determinar si el evento ya pasó
+                      const eventDate = event.event_date ? new Date(event.event_date) : null;
+                      const today = new Date();
+                      const isPastEvent = eventDate ? eventDate <= today : true; // Si no hay fecha, asumimos que ya pasó
+                      
+                      // Si es evento pasado, o es llegada al destino y fue entregado, mostrarlo colorido
+                      const canShowLocation = isPastEvent || (entregado && esEventoEntrega);
+                      
+                      // Estilos negativos solo para eventos futuros
+                      const negativeStyle = (!canShowLocation) ? 'opacity-60 grayscale' : '';
                       const negativeText = (!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-400' : '';
                       const negativeIcon = (!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-300' : '';
                       return (
