@@ -12,6 +12,8 @@ import ApprovalQueue from "./pages/ApprovalQueue";
 import MaritimeDashboard from "./pages/MaritimeDashboard";
 import AdminPanel from "./pages/AdminPanel";
 import DatosApi from "./pages/DatosApi";
+import LoginPage from "./pages/LoginPage";
+import RequireAuth from "./lib/RequireAuth";
 
 const queryClient = new QueryClient();
 
@@ -22,14 +24,15 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route element={<Layout />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<RequireAuth><Layout /></RequireAuth>}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/maritime-dashboard" element={<MaritimeDashboard />} />
             <Route path="/container-detail/:containerNumber" element={<ContainerDetail />} />
             <Route path="/container-tracking" element={<ContainerTracking />} />
             <Route path="/approval-queue" element={<ApprovalQueue />} />
             <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/datos-api" element={<DatosApi />} />
+            <Route path="/datos-api" element={<DatosApi />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Table,
@@ -13,7 +13,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Search } from 'lucide-react';
+import { Search, Upload } from 'lucide-react';
+import ExcelUploadModal from '@/components/ExcelUploadModal';
 
 type CorreoRow = {
   id: number;
@@ -34,8 +35,8 @@ type CorreoRow = {
 
 const fakeData: CorreoRow[] = Array.from({ length: 12 }).map((_, i) => ({
   id: i + 1,
-  titulo: `Solicitud ${i + 1}`,
-  proveedor: `Proveedor ${((i % 4) + 1)}`,
+  titulo: `16/1 RIZO ${i + 1}`,
+  proveedor: `Gurulaxmi ${((i % 4) + 1)}`,
   num_contenedor: ['MSMU6181134','TGBU5843024','MSMU6351035','FFAU2236575'][i % 4],
   estado: ['Pendiente','Revisar','Urgente'][i % 3],
   naviera: ['MSC','MAERSK','CMA-CGM','HAMBURG'][i % 4],
@@ -47,6 +48,7 @@ const fakeData: CorreoRow[] = Array.from({ length: 12 }).map((_, i) => ({
 
 const columns = [
   { key: 'num_contenedor', label: 'CONTENEDOR' },
+  { key: 'contrato', label: 'CONTRATO' },
   { key: 'titulo', label: 'TÍTULO' },
   { key: 'naviera', label: 'NAVIERA' },
   { key: 'etd', label: 'ETD' },
@@ -60,35 +62,36 @@ const ApprovalQueue = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const pageSize = 6;
 
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('cnn_correo_tracking')
-          .select('*')
-          .order('created_at', { ascending: false });
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('cnn_correo_tracking')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Error fetching cnn_correo_tracking:', error);
-          setRows(fakeData);
-        } else if (!data || data.length === 0) {
-          setRows(fakeData);
-        } else {
-          setRows(data as CorreoRow[]);
-        }
-      } catch (e) {
-        console.error(e);
+      if (error) {
+        console.error('Error fetching cnn_correo_tracking:', error);
         setRows(fakeData);
-      } finally {
-        setLoading(false);
+      } else if (!data || data.length === 0) {
+        setRows(fakeData);
+      } else {
+        setRows(data as CorreoRow[]);
       }
-    };
-
-    fetch();
+    } catch (e) {
+      console.error(e);
+      setRows(fakeData);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const filtered = useMemo(() => {
     return rows.filter(r =>
@@ -126,6 +129,10 @@ const ApprovalQueue = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Módulo de Aprobaciones</h1>
         <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => setIsModalOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Subir Excel
+          </Button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar por contenedor, título o naviera..." className="w-72 pl-9" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }} />
@@ -199,6 +206,14 @@ const ApprovalQueue = () => {
           </div>
         </div>
       </div>
+      <ExcelUploadModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => {
+          fetchData();
+          setIsModalOpen(false);
+        }}
+      />
     </div>
   );
 };

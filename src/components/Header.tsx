@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Link } from 'react-router-dom';
+import Login from "@/components/Login";
+import { useAuth } from "@/lib/useAuth";
 import { Bell, AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,7 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Link } from "react-router-dom";
+// ...existing code...
 
 type Notification = {
   id: number;
@@ -26,12 +29,14 @@ const NotificationIcon = ({ severity }: { severity: string }) => {
 
 const Header = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const { user } = useAuth();
 
  
 
   return (
     <header className="h-16 flex items-center justify-end px-8 bg-white border-b">
-      <Popover>
+      <div className="flex items-center space-x-4">
+        <Popover>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
@@ -73,7 +78,24 @@ const Header = () => {
             </div>
           </div>
         </PopoverContent>
-      </Popover>
+        </Popover>
+
+        {user ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{user.email}</span>
+            <button
+              className="text-sm text-destructive"
+              onClick={async () => {
+                await supabase.auth.signOut();
+              }}
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        ) : (
+          <Link to="/login" className="px-3 py-1 rounded-md bg-primary text-primary-foreground text-sm inline-block">Acceder</Link>
+        )}
+      </div>
     </header>
   );
 };

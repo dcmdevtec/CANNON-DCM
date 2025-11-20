@@ -1,180 +1,123 @@
--- ============================================================================ 
--- VISTA: CNN_INVENTARIO_ESPACIOS_SEMANAL
--- Inventario semanal de espacios usados por naviera, proveedor y puerto
--- ============================================================================ 
-CREATE OR REPLACE VIEW cnn_inventario_espacios_semanal AS
-SELECT
-    EXTRACT(YEAR FROM f.etd) AS anio,
-    EXTRACT(WEEK FROM f.etd) AS semana,
-    f.naviera,
-    f.proveedor,
-    f.llegada_bquilla AS puerto,
-    COUNT(*) AS espacios_usados
-FROM cnn_container_factura_view f
-WHERE f.etd IS NOT NULL
-GROUP BY anio, semana, f.naviera, f.proveedor, puerto
-ORDER BY anio DESC, semana DESC, f.naviera, f.proveedor, puerto;
-
--- ============================================================================
--- VISTA: CNN_LLEGADA_CONTENEDORES_MENSUAL
--- Acumulado mensual de llegada de contenedores por naviera, proveedor y puerto
--- ============================================================================
-CREATE OR REPLACE VIEW cnn_llegada_contenedores_mensual AS
-SELECT
-    EXTRACT(YEAR FROM f.llegada_bquilla) AS anio,
-    EXTRACT(MONTH FROM f.llegada_bquilla) AS mes,
-    f.naviera,
-    f.proveedor,
-    f.llegada_bquilla AS puerto,
-    COUNT(*) AS total_contenedores
-FROM cnn_container_factura_view f
-WHERE f.llegada_bquilla IS NOT NULL
-GROUP BY anio, mes, f.naviera, f.proveedor, puerto
-ORDER BY anio DESC, mes DESC, f.naviera, f.proveedor, puerto;
 -- ============================================================================
 -- SUPABASE CONTAINER TRACKING DATABASE SCHEMA - PROYECTO CNN
 -- Script completo para ejecutar de una sola vez
+-- v2.0 - Corregido y Ordenado
 -- ============================================================================
 
--- Enable UUID extension
+-- ============================================================================
+-- 0. EXTENSIONES
+-- ============================================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-create table public.cnn_factura_tracking (
-  id serial not null,
-  titulo character varying(50) null,
-  proveedor character varying(100) null,
-  contrato character varying(50) null,
-  despacho character varying(50) null,
-  num_contenedor character varying(20) null,
-  llegada_bquilla date null,
-  contenedor character varying(20) null,
-  estado character varying(100) null,
-  naviera character varying(50) null,
-  factura character varying(50) null,
-  etd date null,
-  eta date null,
-  dias_transito integer null,
-  created_at timestamp without time zone null default CURRENT_TIMESTAMP,
-  container_info_id integer null,
-) TABLESPACE pg_default;
 -- ============================================================================
--- 1. TABLA PRINCIPAL: CNN_CONTAINER_TRACKING
+-- 1. FUNCIONES GENERALES
 -- ============================================================================
-create table public.cnn_container_tracking (
-  id uuid not null default extensions.uuid_generate_v4 (),
-  container_number character varying(20) not null,
-  bill_of_lading_number character varying(50) null,
-  container_type character varying(30) null,
-  shipped_from character varying(100) null,
-  shipped_to character varying(100) null,
-  port_of_load character varying(100) null,
-  port_of_discharge character varying(100) null,
-  current_status character varying(100) null,
-  current_location character varying(100) null,
-  latest_move character varying(100) null,
-  pod_eta_date date null,
-  price_calculation_date date null,
-  is_delivered boolean null default false,
-  total_events integer null default 0,
-  number_of_containers integer null default 1,
-  tracking_type character varying(20) null default 'Container'::character varying,
-  tracking_date date null,
-  transhipments json[] null,
-  route_summary character varying(200) null,
-  processing_timestamp timestamp with time zone null,
-  created_at timestamp with time zone null default now(),
-  updated_at timestamp with time zone null default now(),
-  extracted_at timestamp with time zone null,
-  statistics jsonb null,
-  current_status_data jsonb null,
-  metadata jsonb null,
-  original_message jsonb null,
-  constraint cnn_container_tracking_pkey primary key (id),
-  constraint chk_container_number_format check ((length((container_number)::text) >= 10)),
-  constraint chk_tracking_type check (
-    (
-      (tracking_type)::text = any (
-        (
-          array[
-            'Container'::character varying,
-            'Vessel'::character varying,
-            'Bill'::character varying
-          ]
-        )::text[]
-      )
-    )
-  )
-) TABLESPACE pg_default;
 
-create index IF not exists idx_cnn_container_tracking_number on public.cnn_container_tracking using btree (container_number) TABLESPACE pg_default;
-
-create index IF not exists idx_cnn_container_tracking_status on public.cnn_container_tracking using btree (current_status) TABLESPACE pg_default;
-
-create index IF not exists idx_cnn_container_tracking_eta on public.cnn_container_tracking using btree (pod_eta_date) TABLESPACE pg_default;
-
-create index IF not exists idx_cnn_container_tracking_delivered on public.cnn_container_tracking using btree (is_delivered) TABLESPACE pg_default;
-
-create index IF not exists idx_cnn_container_tracking_date on public.cnn_container_tracking using btree (tracking_date) TABLESPACE pg_default;
-
-create trigger update_cnn_container_tracking_updated_at BEFORE
-update on cnn_container_tracking for EACH row
-execute FUNCTION update_updated_at_column ();
+-- Función para actualizar el campo 'updated_at' automáticamente en cada modificación
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS 
+$func$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$func$ LANGUAGE plpgsql;
 
 -- ============================================================================
--- 2. TABLA: CNN_CONTAINER_EVENTS
+-- 2. DEFINICIÓN DE TABLAS
 -- ============================================================================
-create table public.cnn_container_events (
-  id uuid not null default extensions.uuid_generate_v4 (),
-  container_tracking_id uuid not null,
-  event_date date null,
-  event_time time without time zone null,
-  location character varying(100) null,
-  port character varying(100) null,
-  country character varying(5) null,
-  event_type character varying(100) null,
-  event_description text null,
-  vessel_name character varying(100) null,
-  voyage_number character varying(50) null,
-  terminal character varying(100) null,
-  event_sequence integer null,
-  is_estimated boolean null default false,
-  created_at timestamp with time zone null default now(),
-  updated_at timestamp with time zone null default now(),
-  metadata json null,
-  vessel_data json null,
-  event_datetime timestamp with time zone null,
-  vessel_imo text null,
-  vessel_flag character varying null,
-  vessel_latitude double precision null,
-  vessel_longitude double precision null,
-  vessel_location text null,
-  vessel_type text null,
-  vessel_capacity smallint null,
-  vessel_last_update timestamp with time zone null,
-  constraint cnn_container_events_pkey primary key (id),
-  constraint cnn_container_events_container_tracking_id_fkey foreign KEY (container_tracking_id) references cnn_container_tracking (id) on delete CASCADE,
-  constraint chk_event_sequence_positive check ((event_sequence > 0)),
-  constraint chk_country_code check ((length((country)::text) <= 5))
-) TABLESPACE pg_default;
 
-create index IF not exists idx_cnn_container_events_tracking_id on public.cnn_container_events using btree (container_tracking_id) TABLESPACE pg_default;
+-- Tabla para datos de facturas (origen puede ser un ERP o sistema externo)
+CREATE TABLE public.cnn_factura_tracking (
+  id serial NOT NULL PRIMARY KEY,
+  titulo character varying(50) NULL,
+  proveedor character varying(100) NULL,
+  contrato character varying(50) NULL,
+  despacho character varying(50) NULL,
+  num_contenedor character varying(20) NULL,
+  llegada_bquilla date NULL,
+  contenedor character varying(20) NULL,
+  estado character varying(100) NULL,
+  naviera character varying(50) NULL,
+  factura character varying(50) NULL,
+  etd date NULL,
+  eta date NULL,
+  dias_transito integer NULL,
+  created_at timestamp without time zone NULL DEFAULT CURRENT_TIMESTAMP,
+  container_info_id integer NULL
+);
 
-create index IF not exists idx_cnn_container_events_date on public.cnn_container_events using btree (event_date) TABLESPACE pg_default;
+-- Tabla principal para la información de tracking de contenedores
+CREATE TABLE public.cnn_container_tracking (
+  id uuid NOT NULL DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
+  container_number character varying(20) NOT NULL,
+  bill_of_lading_number character varying(50) NULL,
+  container_type character varying(30) NULL,
+  shipped_from character varying(100) NULL,
+  shipped_to character varying(100) NULL,
+  port_of_load character varying(100) NULL,
+  port_of_discharge character varying(100) NULL,
+  current_status character varying(100) NULL,
+  current_location character varying(100) NULL,
+  latest_move character varying(100) NULL,
+  pod_eta_date date NULL,
+  price_calculation_date date NULL,
+  is_delivered boolean NULL DEFAULT false,
+  total_events integer NULL DEFAULT 0,
+  number_of_containers integer NULL DEFAULT 1,
+  tracking_type character varying(20) NULL DEFAULT 'Container'::character varying,
+  tracking_date date NULL,
+  transhipments jsonb[] NULL,
+  route_summary character varying(200) NULL,
+  processing_timestamp timestamp with time zone NULL,
+  created_at timestamp with time zone NULL DEFAULT now(),
+  updated_at timestamp with time zone NULL DEFAULT now(),
+  extracted_at timestamp with time zone NULL,
+  statistics jsonb NULL,
+  current_status_data jsonb NULL,
+  metadata jsonb NULL,
+  original_message jsonb NULL,
+  CONSTRAINT chk_container_number_format CHECK ((length((container_number)::text) >= 10)),
+  CONSTRAINT chk_tracking_type CHECK (((tracking_type)::text = ANY (ARRAY[('Container'::character varying)::text, ('Vessel'::character varying)::text, ('Bill'::character varying)::text])))
+);
 
-create index IF not exists idx_cnn_container_events_location on public.cnn_container_events using btree (location) TABLESPACE pg_default;
+-- Tabla para los eventos o movimientos de un contenedor
+CREATE TABLE public.cnn_container_events (
+  id uuid NOT NULL DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
+  container_tracking_id uuid NOT NULL REFERENCES public.cnn_container_tracking(id) ON DELETE CASCADE,
+  event_date date NULL,
+  event_time time without time zone NULL,
+  location character varying(100) NULL,
+  port character varying(100) NULL,
+  country character varying(5) NULL,
+  event_type character varying(100) NULL,
+  event_description text NULL,
+  vessel_name character varying(100) NULL,
+  voyage_number character varying(50) NULL,
+  terminal character varying(100) NULL,
+  event_sequence integer NULL,
+  is_estimated boolean NULL DEFAULT false,
+  created_at timestamp with time zone NULL DEFAULT now(),
+  updated_at timestamp with time zone NULL DEFAULT now(),
+  metadata jsonb NULL,
+  vessel_data jsonb NULL,
+  event_datetime timestamp with time zone NULL,
+  vessel_imo text NULL,
+  vessel_flag character varying NULL,
+  vessel_latitude double precision NULL,
+  vessel_longitude double precision NULL,
+  vessel_location text NULL,
+  vessel_type text NULL,
+  vessel_capacity smallint NULL,
+  vessel_last_update timestamp with time zone NULL,
+  CONSTRAINT chk_event_sequence_positive CHECK ((event_sequence > 0)),
+  CONSTRAINT chk_country_code CHECK ((length((country)::text) <= 5))
+);
 
-create index IF not exists idx_cnn_container_events_sequence on public.cnn_container_events using btree (container_tracking_id, event_sequence) TABLESPACE pg_default;
-
-create trigger update_cnn_container_events_updated_at BEFORE
-update on cnn_container_events for EACH row
-execute FUNCTION update_updated_at_column ();
-
--- ============================================================================
--- 3. TABLA: CNN_CONTAINER_VESSELS
--- ============================================================================
-CREATE TABLE CNN_container_vessels (
+-- Tabla para los buques asociados a un tracking
+CREATE TABLE public.cnn_container_vessels (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    container_tracking_id UUID NOT NULL REFERENCES CNN_container_tracking(id) ON DELETE CASCADE,
+    container_tracking_id UUID NOT NULL REFERENCES public.cnn_container_tracking(id) ON DELETE CASCADE,
     vessel_name VARCHAR(100) NOT NULL,
     vessel_imo VARCHAR(20),
     vessel_flag VARCHAR(5),
@@ -183,17 +126,14 @@ CREATE TABLE CNN_container_vessels (
     vessel_sequence INTEGER,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
     CONSTRAINT chk_vessel_imo_format CHECK (vessel_imo IS NULL OR LENGTH(vessel_imo) >= 7),
     CONSTRAINT chk_vessel_sequence_positive CHECK (vessel_sequence > 0)
 );
 
--- ============================================================================
--- 4. TABLA: CNN_TRACKING_SUMMARY
--- ============================================================================
-CREATE TABLE CNN_tracking_summary (
+-- Tabla de resumen para cada tracking
+CREATE TABLE public.cnn_tracking_summary (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    container_tracking_id UUID NOT NULL REFERENCES CNN_container_tracking(id) ON DELETE CASCADE,
+    container_tracking_id UUID NOT NULL REFERENCES public.cnn_container_tracking(id) ON DELETE CASCADE,
     container_number VARCHAR(20) NOT NULL,
     last_updated TIMESTAMPTZ,
     total_events INTEGER DEFAULT 0,
@@ -209,97 +149,82 @@ CREATE TABLE CNN_tracking_summary (
     has_transhipments BOOLEAN DEFAULT false,
     transhipment_count INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    CONSTRAINT chk_total_counts_positive CHECK (
-        total_events >= 0 AND 
-        total_ports >= 0 AND 
-        total_vessels >= 0 AND 
-        transhipment_count >= 0
-    ),
-    CONSTRAINT chk_dates_logical CHECK (
-        first_event_date IS NULL OR 
-        last_event_date IS NULL OR 
-        first_event_date <= last_event_date
-    )
+    CONSTRAINT chk_total_counts_positive CHECK (total_events >= 0 AND total_ports >= 0 AND total_vessels >= 0 AND transhipment_count >= 0),
+    CONSTRAINT chk_dates_logical CHECK (first_event_date IS NULL OR last_event_date IS NULL OR first_event_date <= last_event_date)
 );
 
--- ============================================================================
--- 5. TABLA: CNN_CONTAINER_METADATA
--- ============================================================================
-CREATE TABLE CNN_container_metadata (
+-- Tabla para metadatos del proceso de tracking
+CREATE TABLE public.cnn_container_metadata (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    container_tracking_id UUID NOT NULL REFERENCES CNN_container_tracking(id) ON DELETE CASCADE,
+    container_tracking_id UUID NOT NULL REFERENCES public.cnn_container_tracking(id) ON DELETE CASCADE,
     total_records JSONB,
     primary_keys JSONB,
     data_quality JSONB,
     original_message TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    CONSTRAINT chk_data_quality_completeness CHECK (
-        data_quality IS NULL OR 
-        (data_quality->>'completeness')::INTEGER BETWEEN 0 AND 100
-    )
+    CONSTRAINT chk_data_quality_completeness CHECK (data_quality IS NULL OR (data_quality->>'completeness')::INTEGER BETWEEN 0 AND 100)
+);
+
+-- Tabla para datos de tracking recibidos por correo (similar a factura_tracking)
+CREATE TABLE public.cnn_correo_tracking (
+  id serial NOT NULL PRIMARY KEY,
+  titulo character varying(50) NULL,
+  proveedor character varying(100) NULL,
+  contrato character varying(50) NULL,
+  despacho character varying(50) NULL,
+  num_contenedor character varying(20) NULL,
+  llegada_bquilla date NULL,
+  contenedor character varying(20) NULL,
+  estado character varying(100) NULL,
+  naviera character varying(50) NULL,
+  factura character varying(50) NULL,
+  etd date NULL,
+  eta date NULL,
+  created_at timestamp without time zone NULL DEFAULT CURRENT_TIMESTAMP,
+  container_info_id integer NULL
 );
 
 -- ============================================================================
--- ÍNDICES PARA OPTIMIZACIÓN
+-- 3. ÍNDICES PARA OPTIMIZACIÓN
 -- ============================================================================
 
--- Índices para CNN_container_tracking
-CREATE INDEX idx_CNN_container_tracking_number ON CNN_container_tracking(container_number);
-CREATE INDEX idx_CNN_container_tracking_status ON CNN_container_tracking(current_status);
-CREATE INDEX idx_CNN_container_tracking_eta ON CNN_container_tracking(pod_eta_date);
-CREATE INDEX idx_CNN_container_tracking_delivered ON CNN_container_tracking(is_delivered);
-CREATE INDEX idx_CNN_container_tracking_date ON CNN_container_tracking(tracking_date);
+-- Índices para cnn_container_tracking
+CREATE INDEX IF NOT EXISTS idx_cnn_container_tracking_number ON public.cnn_container_tracking(container_number);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_tracking_status ON public.cnn_container_tracking(current_status);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_tracking_eta ON public.cnn_container_tracking(pod_eta_date);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_tracking_delivered ON public.cnn_container_tracking(is_delivered);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_tracking_date ON public.cnn_container_tracking(tracking_date);
 
--- Índices para CNN_container_events
-CREATE INDEX idx_CNN_container_events_tracking_id ON CNN_container_events(container_tracking_id);
-CREATE INDEX idx_CNN_container_events_date ON CNN_container_events(event_date);
-CREATE INDEX idx_CNN_container_events_location ON CNN_container_events(location);
-CREATE INDEX idx_CNN_container_events_sequence ON CNN_container_events(container_tracking_id, event_sequence);
+-- Índices para cnn_container_events
+CREATE INDEX IF NOT EXISTS idx_cnn_container_events_tracking_id ON public.cnn_container_events(container_tracking_id);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_events_date ON public.cnn_container_events(event_date);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_events_location ON public.cnn_container_events(location);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_events_sequence ON public.cnn_container_events(container_tracking_id, event_sequence);
 
--- Índices para CNN_container_vessels
-CREATE INDEX idx_CNN_container_vessels_tracking_id ON CNN_container_vessels(container_tracking_id);
-CREATE INDEX idx_CNN_container_vessels_imo ON CNN_container_vessels(vessel_imo);
-CREATE INDEX idx_CNN_container_vessels_name ON CNN_container_vessels(vessel_name);
+-- Índices para cnn_container_vessels
+CREATE INDEX IF NOT EXISTS idx_cnn_container_vessels_tracking_id ON public.cnn_container_vessels(container_tracking_id);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_vessels_imo ON public.cnn_container_vessels(vessel_imo);
+CREATE INDEX IF NOT EXISTS idx_cnn_container_vessels_name ON public.cnn_container_vessels(vessel_name);
 
--- Índices para CNN_tracking_summary
-CREATE INDEX idx_CNN_tracking_summary_container_id ON CNN_tracking_summary(container_tracking_id);
-CREATE INDEX idx_CNN_tracking_summary_container_number ON CNN_tracking_summary(container_number);
-CREATE INDEX idx_CNN_tracking_summary_in_transit ON CNN_tracking_summary(is_in_transit);
-CREATE INDEX idx_CNN_tracking_summary_estimated_arrival ON CNN_tracking_summary(estimated_arrival);
-
--- ============================================================================
--- FUNCIÓN PARA UPDATED_AT AUTOMÁTICO
--- ============================================================================
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS 
-$func$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$func$ LANGUAGE plpgsql;
+-- Índices para cnn_tracking_summary
+CREATE INDEX IF NOT EXISTS idx_cnn_tracking_summary_container_id ON public.cnn_tracking_summary(container_tracking_id);
+CREATE INDEX IF NOT EXISTS idx_cnn_tracking_summary_container_number ON public.cnn_tracking_summary(container_number);
+CREATE INDEX IF NOT EXISTS idx_cnn_tracking_summary_in_transit ON public.cnn_tracking_summary(is_in_transit);
+CREATE INDEX IF NOT EXISTS idx_cnn_tracking_summary_estimated_arrival ON public.cnn_tracking_summary(estimated_arrival);
 
 -- ============================================================================
--- TRIGGERS PARA UPDATED_AT
+-- 4. TRIGGERS PARA UPDATED_AT AUTOMÁTICO
 -- ============================================================================
-CREATE TRIGGER update_CNN_container_tracking_updated_at 
-    BEFORE UPDATE ON CNN_container_tracking 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_CNN_container_events_updated_at 
-    BEFORE UPDATE ON CNN_container_events 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_CNN_container_vessels_updated_at 
-    BEFORE UPDATE ON CNN_container_vessels 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_cnn_container_tracking_updated_at BEFORE UPDATE ON public.cnn_container_tracking FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER update_cnn_container_events_updated_at BEFORE UPDATE ON public.cnn_container_events FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER update_cnn_container_vessels_updated_at BEFORE UPDATE ON public.cnn_container_vessels FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ============================================================================
--- FUNCIÓN PRINCIPAL PARA INSERTAR DATOS DEL JSON
+-- 5. FUNCIONES PARA MANEJO DE DATOS (CRUD)
 -- ============================================================================
-CREATE OR REPLACE FUNCTION insert_CNN_container_tracking_data(p_data JSONB)
+
+-- Función principal para insertar datos desde un JSON
+CREATE OR REPLACE FUNCTION public.insert_cnn_container_tracking_data(p_data JSONB)
 RETURNS UUID AS 
 $main_func$
 DECLARE
@@ -309,8 +234,8 @@ DECLARE
     v_vessel JSONB;
     v_tracking_data JSONB := p_data->0;
 BEGIN
-    -- Insertar CNN_container_tracking
-    INSERT INTO CNN_container_tracking (
+    -- Insertar en cnn_container_tracking
+    INSERT INTO public.cnn_container_tracking (
         container_number, bill_of_lading_number, container_type,
         shipped_from, shipped_to, port_of_load, port_of_discharge,
         current_status, current_location, latest_move, pod_eta_date,
@@ -329,47 +254,29 @@ BEGIN
         (v_tracking_data->'container_tracking'->>'current_status'),
         (v_tracking_data->'container_tracking'->>'current_location'),
         (v_tracking_data->'container_tracking'->>'latest_move'),
-        CASE 
-            WHEN (v_tracking_data->'container_tracking'->>'pod_eta_date') IS NULL THEN NULL
-            ELSE (v_tracking_data->'container_tracking'->>'pod_eta_date')::DATE
-        END,
+        (v_tracking_data->'container_tracking'->>'pod_eta_date')::DATE,
         COALESCE((v_tracking_data->'container_tracking'->>'is_delivered')::BOOLEAN, false),
         COALESCE((v_tracking_data->'container_tracking'->>'total_events')::INTEGER, 0),
         COALESCE((v_tracking_data->'container_tracking'->>'number_of_containers')::INTEGER, 1),
         COALESCE((v_tracking_data->'container_tracking'->>'tracking_type'), 'Container'),
-        CASE 
-            WHEN (v_tracking_data->'container_tracking'->>'tracking_date') IS NULL THEN NULL
-            ELSE (v_tracking_data->'container_tracking'->>'tracking_date')::DATE
-        END,
-        CASE 
-            WHEN v_tracking_data->'container_tracking'->'transhipments' IS NULL THEN NULL
-            ELSE ARRAY(SELECT jsonb_array_elements_text(v_tracking_data->'container_tracking'->'transhipments'))
-        END,
+        (v_tracking_data->'container_tracking'->>'tracking_date')::DATE,
+        (SELECT array_agg(value) FROM jsonb_array_elements(v_tracking_data->'container_tracking'->'transhipments')),
         (v_tracking_data->'container_tracking'->>'route_summary'),
-        CASE 
-            WHEN (v_tracking_data->'container_tracking'->>'processing_timestamp') IS NULL THEN NULL
-            ELSE (v_tracking_data->'container_tracking'->>'processing_timestamp')::TIMESTAMPTZ
-        END,
-        CASE 
-            WHEN (v_tracking_data->'container_tracking'->>'extracted_at') IS NULL THEN NULL
-            ELSE (v_tracking_data->'container_tracking'->>'extracted_at')::TIMESTAMPTZ
-        END
+        (v_tracking_data->'container_tracking'->>'processing_timestamp')::TIMESTAMPTZ,
+        (v_tracking_data->'container_tracking'->>'extracted_at')::TIMESTAMPTZ
     RETURNING id INTO v_container_id;
 
     -- Insertar eventos
     IF v_tracking_data->'container_events' IS NOT NULL THEN
         FOR v_event IN SELECT * FROM jsonb_array_elements(v_tracking_data->'container_events')
         LOOP
-            INSERT INTO CNN_container_events (
+            INSERT INTO public.cnn_container_events (
                 container_tracking_id, event_date, location, port, country,
                 event_type, event_description, vessel_name, voyage_number,
                 terminal, event_sequence, is_estimated
             ) VALUES (
                 v_container_id,
-                CASE 
-                    WHEN (v_event->>'event_date') IS NULL THEN NULL
-                    ELSE (v_event->>'event_date')::DATE
-                END,
+                (v_event->>'event_date')::DATE,
                 (v_event->>'location'),
                 (v_event->>'port'),
                 (v_event->>'country'),
@@ -378,10 +285,7 @@ BEGIN
                 (v_event->>'vessel_name'),
                 (v_event->>'voyage_number'),
                 (v_event->>'terminal'),
-                CASE 
-                    WHEN (v_event->>'event_sequence') IS NULL THEN NULL
-                    ELSE (v_event->>'event_sequence')::INTEGER
-                END,
+                (v_event->>'event_sequence')::INTEGER,
                 COALESCE((v_event->>'is_estimated')::BOOLEAN, false)
             );
         END LOOP;
@@ -391,7 +295,7 @@ BEGIN
     IF v_tracking_data->'container_vessels' IS NOT NULL THEN
         FOR v_vessel IN SELECT * FROM jsonb_array_elements(v_tracking_data->'container_vessels')
         LOOP
-            INSERT INTO CNN_container_vessels (
+            INSERT INTO public.cnn_container_vessels (
                 container_tracking_id, vessel_name, vessel_imo, vessel_flag,
                 voyage_number, service_name, vessel_sequence
             ) VALUES (
@@ -401,17 +305,14 @@ BEGIN
                 (v_vessel->>'vessel_flag'),
                 (v_vessel->>'voyage_number'),
                 (v_vessel->>'service_name'),
-                CASE 
-                    WHEN (v_vessel->>'vessel_sequence') IS NULL THEN NULL
-                    ELSE (v_vessel->>'vessel_sequence')::INTEGER
-                END
+                (v_vessel->>'vessel_sequence')::INTEGER
             );
         END LOOP;
     END IF;
 
-    -- Insertar CNN_tracking_summary
+    -- Insertar resumen
     IF v_tracking_data->'tracking_summary' IS NOT NULL THEN
-        INSERT INTO CNN_tracking_summary (
+        INSERT INTO public.cnn_tracking_summary (
             container_tracking_id, container_number, last_updated,
             total_events, total_ports, total_vessels, first_event_date,
             last_event_date, estimated_arrival, is_in_transit, current_phase,
@@ -420,25 +321,13 @@ BEGIN
         SELECT
             v_container_id,
             (v_tracking_data->'tracking_summary'->>'container_number'),
-            CASE 
-                WHEN (v_tracking_data->'tracking_summary'->>'last_updated') IS NULL THEN NULL
-                ELSE (v_tracking_data->'tracking_summary'->>'last_updated')::TIMESTAMPTZ
-            END,
+            (v_tracking_data->'tracking_summary'->>'last_updated')::TIMESTAMPTZ,
             COALESCE((v_tracking_data->'tracking_summary'->>'total_events')::INTEGER, 0),
             COALESCE((v_tracking_data->'tracking_summary'->>'total_ports')::INTEGER, 0),
             COALESCE((v_tracking_data->'tracking_summary'->>'total_vessels')::INTEGER, 0),
-            CASE 
-                WHEN (v_tracking_data->'tracking_summary'->>'first_event_date') IS NULL THEN NULL
-                ELSE (v_tracking_data->'tracking_summary'->>'first_event_date')::DATE
-            END,
-            CASE 
-                WHEN (v_tracking_data->'tracking_summary'->>'last_event_date') IS NULL THEN NULL
-                ELSE (v_tracking_data->'tracking_summary'->>'last_event_date')::DATE
-            END,
-            CASE 
-                WHEN (v_tracking_data->'tracking_summary'->>'estimated_arrival') IS NULL THEN NULL
-                ELSE (v_tracking_data->'tracking_summary'->>'estimated_arrival')::DATE
-            END,
+            (v_tracking_data->'tracking_summary'->>'first_event_date')::DATE,
+            (v_tracking_data->'tracking_summary'->>'last_event_date')::DATE,
+            (v_tracking_data->'tracking_summary'->>'estimated_arrival')::DATE,
             COALESCE((v_tracking_data->'tracking_summary'->>'is_in_transit')::BOOLEAN, false),
             (v_tracking_data->'tracking_summary'->>'current_phase'),
             (v_tracking_data->'tracking_summary'->>'origin_country'),
@@ -448,9 +337,9 @@ BEGIN
         RETURNING id INTO v_tracking_summary_id;
     END IF;
 
-    -- Insertar metadata
+    -- Insertar metadatos
     IF v_tracking_data->'metadata' IS NOT NULL THEN
-        INSERT INTO CNN_container_metadata (
+        INSERT INTO public.cnn_container_metadata (
             container_tracking_id, total_records, primary_keys, 
             data_quality, original_message
         ) VALUES (
@@ -466,10 +355,8 @@ BEGIN
 END;
 $main_func$ LANGUAGE plpgsql;
 
--- ============================================================================
--- FUNCIÓN AUXILIAR PARA INSERTAR/ACTUALIZAR CONTENEDOR
--- ============================================================================
-CREATE OR REPLACE FUNCTION upsert_CNN_container_tracking_data(p_data JSONB)
+-- Función para insertar/actualizar (upsert) un contenedor y sus datos asociados
+CREATE OR REPLACE FUNCTION public.upsert_cnn_container_tracking_data(p_data JSONB)
 RETURNS UUID AS 
 $upsert_func$
 DECLARE
@@ -481,35 +368,29 @@ BEGIN
     
     -- Verificar si el contenedor ya existe
     SELECT id INTO v_container_id 
-    FROM CNN_container_tracking 
+    FROM public.cnn_container_tracking 
     WHERE container_number = v_container_number;
     
+    -- Si existe, eliminar todos los datos asociados para re-insertarlos (estrategia de refresco total)
     IF v_container_id IS NOT NULL THEN
-        -- Si existe, eliminar datos relacionados y re-insertar
-        DELETE FROM CNN_container_events WHERE container_tracking_id = v_container_id;
-        DELETE FROM CNN_container_vessels WHERE container_tracking_id = v_container_id;
-        DELETE FROM CNN_tracking_summary WHERE container_tracking_id = v_container_id;
-        DELETE FROM CNN_container_metadata WHERE container_tracking_id = v_container_id;
-        DELETE FROM CNN_container_tracking WHERE id = v_container_id;
+        DELETE FROM public.cnn_container_tracking WHERE id = v_container_id; -- El ON DELETE CASCADE se encarga del resto
     END IF;
     
-    -- Insertar datos nuevos
-    RETURN insert_CNN_container_tracking_data(p_data);
+    -- Insertar los datos nuevos usando la función principal
+    RETURN public.insert_cnn_container_tracking_data(p_data);
 END;
 $upsert_func$ LANGUAGE plpgsql;
 
--- ============================================================================
--- FINALIZACIÓN DEL SCRIPT
 
 -- ============================================================================
--- VISTA: CNN_CONTAINER_FACTURA_VIEW
--- Combina los campos principales de ambas tablas, priorizando datos en tiempo real
+-- 6. VISTAS (VIEWS)
 -- ============================================================================
-create view public.cnn_container_factura_view as
-with
-  ranked as (
-    select
-      f.id as factura_id,
+
+-- Vista que combina datos de facturas con datos de tracking en tiempo real
+CREATE OR REPLACE VIEW public.cnn_container_factura_view AS
+WITH ranked AS (
+    SELECT
+      f.id AS factura_id,
       f.titulo,
       f.proveedor,
       f.contrato,
@@ -517,98 +398,96 @@ with
       f.num_contenedor,
       f.contenedor,
       f.etd,
-      null::text as atd,
-      COALESCE(t.pod_eta_date, f.eta) as eta,
+      NULL::text AS atd,
+      COALESCE(t.pod_eta_date, f.eta) AS eta,
       f.llegada_bquilla,
       f.factura,
-      COALESCE(t.current_status, f.estado) as estado,
-      COALESCE(t.current_status, f.estado) as estado_tracking,
-      COALESCE(t.current_location, null::character varying) as ubicacion_actual,
-      COALESCE(t.current_status, null::character varying) as status_tracking,
-      COALESCE(t.tracking_type, null::character varying) as tracking_type,
-      COALESCE(t.tracking_date, null::date) as tracking_date,
-      COALESCE(t.route_summary, null::character varying) as route_summary,
-      COALESCE(t.transhipments, null::json[]) as transhipments,
-      COALESCE(t.is_delivered, null::boolean) as is_delivered,
-      COALESCE(t.total_events, null::integer) as total_events,
-      COALESCE(t.number_of_containers, null::integer) as number_of_containers,
+      COALESCE(t.current_status, f.estado) AS estado,
+      t.current_status AS estado_tracking,
+      t.current_location AS ubicacion_actual,
+      t.tracking_type,
+      t.tracking_date,
+      t.route_summary,
+      t.transhipments,
+      t.is_delivered,
+      t.total_events,
+      t.number_of_containers,
       f.naviera,
       t.created_at,
-      row_number() over (
-        partition by
-          f.num_contenedor,
-          f.contrato
-        order by
-          t.created_at desc
-      ) as rn,
-      -- Columna calculada: entregado
+      row_number() OVER (PARTITION BY f.num_contenedor, f.contrato ORDER BY t.created_at DESC) AS rn,
+      -- Columna calculada para determinar si el contenedor fue entregado en el destino final
       EXISTS (
         SELECT 1
-        FROM cnn_container_events e
-        WHERE
-          e.container_tracking_id = t.id
+        FROM public.cnn_container_events e
+        WHERE e.container_tracking_id = t.id
           AND e.location IS NOT NULL
           AND t.shipped_to IS NOT NULL
-          AND LOWER(TRIM(e.location)) = LOWER(TRIM(t.shipped_to))
+          AND lower(trim(e.location)) = lower(trim(t.shipped_to))
           AND e.event_date IS NOT NULL
           AND e.event_date <= CURRENT_DATE
         LIMIT 1
       ) AS entregado
-    from
-      cnn_factura_tracking f
-      join cnn_container_tracking t on t.container_number::text = f.num_contenedor::text
-  )
-select
-  ranked.factura_id,
-  ranked.titulo,
-  ranked.proveedor,
-  ranked.contrato,
-  ranked.despacho,
-  ranked.num_contenedor,
-  ranked.contenedor,
-  ranked.etd,
-  ranked.atd,
-  ranked.eta,
-  ranked.llegada_bquilla,
-  ranked.factura,
-  ranked.estado,
-  ranked.estado_tracking,
-  ranked.ubicacion_actual,
-  ranked.status_tracking,
-  ranked.tracking_type,
-  ranked.tracking_date,
-  ranked.route_summary,
-  ranked.transhipments,
-  ranked.is_delivered,
-  ranked.total_events,
-  ranked.number_of_containers,
-  ranked.naviera,
-  ranked.created_at,
-  ranked.rn,
-  ranked.entregado
-from
-  ranked
-where
-  ranked.rn = 1;
--- ============================================================================
+    FROM public.cnn_factura_tracking f
+    JOIN public.cnn_container_tracking t ON t.container_number::text = f.num_contenedor::text
+)
+SELECT
+  r.factura_id,
+  r.titulo,
+  r.proveedor,
+  r.contrato,
+  r.despacho,
+  r.num_contenedor,
+  r.contenedor,
+  r.etd,
+  r.atd,
+  r.eta,
+  r.llegada_bquilla,
+  r.factura,
+  r.estado,
+  r.estado_tracking,
+  r.ubicacion_actual,
+  r.tracking_type,
+  r.tracking_date,
+  r.route_summary,
+  r.transhipments,
+  r.is_delivered,
+  r.total_events,
+  r.number_of_containers,
+  r.naviera,
+  r.created_at,
+  r.entregado
+FROM ranked r
+WHERE r.rn = 1;
 
--- Comentario de verificación
-SELECT 'CNN Container Tracking Schema creado exitosamente!' as status;
-create table public.cnn_correo_tracking (
-  id serial not null,
-  titulo character varying(50) null,
-  proveedor character varying(100) null,
-  contrato character varying(50) null,
-  despacho character varying(50) null,
-  num_contenedor character varying(20) null,
-  llegada_bquilla date null,
-  contenedor character varying(20) null,
-  estado character varying(100) null,
-  naviera character varying(50) null,
-  factura character varying(50) null,
-  etd date null,
-  eta date null,
-  created_at timestamp without time zone null default CURRENT_TIMESTAMP,
-  container_info_id integer null,
-  constraint cnn_correo_tracking_pkey primary key (id)
-) TABLESPACE pg_default;
+-- Vista para el inventario semanal de espacios usados
+CREATE OR REPLACE VIEW public.cnn_inventario_espacios_semanal AS
+SELECT
+    EXTRACT(YEAR FROM f.etd) AS anio,
+    EXTRACT(WEEK FROM f.etd) AS semana,
+    f.naviera,
+    f.proveedor,
+    f.llegada_bquilla AS puerto,
+    COUNT(*) AS espacios_usados
+FROM public.cnn_container_factura_view f
+WHERE f.etd IS NOT NULL
+GROUP BY anio, semana, f.naviera, f.proveedor, puerto
+ORDER BY anio DESC, semana DESC, f.naviera, f.proveedor, puerto;
+
+-- Vista para el acumulado mensual de llegada de contenedores
+CREATE OR REPLACE VIEW public.cnn_llegada_contenedores_mensual AS
+SELECT
+    EXTRACT(YEAR FROM f.llegada_bquilla) AS anio,
+    EXTRACT(MONTH FROM f.llegada_bquilla) AS mes,
+    f.naviera,
+    f.proveedor,
+    f.llegada_bquilla AS puerto,
+    COUNT(*) AS total_contenedores
+FROM public.cnn_container_factura_view f
+WHERE f.llegada_bquilla IS NOT NULL
+GROUP BY anio, mes, f.naviera, f.proveedor, puerto
+ORDER BY anio DESC, mes DESC, f.naviera, f.proveedor, puerto;
+
+-- ============================================================================
+-- 7. FINALIZACIÓN DEL SCRIPT
+-- ============================================================================
+SELECT 'CNN Container Tracking Schema v2.0 creado exitosamente!' as status;
