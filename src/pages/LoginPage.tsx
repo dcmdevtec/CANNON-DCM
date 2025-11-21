@@ -14,7 +14,7 @@ const LoginPage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-md p-6 bg-card rounded-lg shadow">
-        <h2 className="text-center text-2xl font-semibold mb-4">Acceder a Cannon</h2>
+        <h2 className="text-center text-2xl font-semibold mb-4">Iniciar sesión</h2>
         <LoginForm />
       </div>
     </div>
