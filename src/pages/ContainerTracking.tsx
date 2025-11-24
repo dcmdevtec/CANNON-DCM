@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { parseISO, differenceInDays, format } from 'date-fns';
 import TransitProgressBar from "@/components/TransitProgressBar";
+import axios from "axios"; // Import axios for making HTTP requests
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-';
@@ -182,6 +183,27 @@ const ContainerTracking = () => {
 
   const estados = ['En Tránsito', 'En Puerto', 'Entregado'];
 
+  const handleContainerClick = async (containerNumber) => {
+    setLoading(true); // Show loading indicator
+    try {
+      const response = await axios.post("https://n8n.dcmsystem.co/webhook/cannon-container-tracking", {
+        container_number: containerNumber,
+        source: "dcm-test",
+      }, {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Webhook-Secret": "dcm_webhook_secret_2024",
+        },
+      });
+      console.log("Response from N8N webhook:", response.data); // Log the response for testing
+      setLoading(false); // Hide loading indicator after successful response
+      navigate(`/container-detail/${containerNumber}`); // Navigate to container details
+    } catch (error) {
+      console.error("Error sending container number to N8N:", error);
+      setLoading(false); // Hide loading indicator in case of error
+    }
+  };
+
   return (
     <div className="p-4 min-h-screen bg-[#f6f7fa]">
       <div className="flex gap-2 mb-2">
@@ -231,7 +253,14 @@ const ContainerTracking = () => {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={13} className="text-center">Cargando...</TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={13} className="text-center">
+                  <div className="flex justify-center items-center">
+                    <div className="loader border-t-4 border-blue-500 rounded-full w-8 h-8 animate-spin"></div>
+                    <span className="ml-2 text-blue-500">Cargando...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
             ) : (
               paginatedFacturas.map((row) => {
                 const { progress, elapsed, total, isError } = calculateProgress(row.etd, row.eta);
@@ -243,7 +272,12 @@ const ContainerTracking = () => {
                     <TableCell>{row.contrato}</TableCell>
                     <TableCell>{row.despacho}</TableCell>
                     <TableCell>
-                      <div className="font-medium text-[#222]">{row.num_contenedor}</div>
+                      <div
+                        className="font-medium text-[#222] cursor-pointer"
+                        onClick={() => handleContainerClick(row.num_contenedor)}
+                      >
+                        {row.num_contenedor}
+                      </div>
                       <div className="text-xs text-[#6b7280]">{row.contenedor}</div>
                     </TableCell>
                     <TableCell>{formatDate(row.etd)}</TableCell>
@@ -257,7 +291,7 @@ const ContainerTracking = () => {
                       {row.entregado ? 'Entregado' : translateStatus(row.estado)}
                     </TableCell>
                     <TableCell>
-                      <button title="Ver detalle" onClick={() => navigate(`/container-detail/${row.num_contenedor}`)} className="hover:bg-gray-100 rounded-full p-1">
+                      <button title="Ver detalle" onClick={() => handleContainerClick(row.num_contenedor)} className="hover:bg-gray-100 rounded-full p-1">
                         <svg width="18" height="18" fill="none" stroke="#e11d48" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z"/></svg>
                       </button>
                     </TableCell>
