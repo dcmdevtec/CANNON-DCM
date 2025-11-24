@@ -31,30 +31,36 @@ type CorreoRow = {
   etd?: string | null;
   eta?: string | null;
   created_at?: string | null;
+  container_info_id?: string | null;
 };
 
 const fakeData: CorreoRow[] = Array.from({ length: 12 }).map((_, i) => ({
   id: i + 1,
   titulo: `16/1 RIZO ${i + 1}`,
   proveedor: `Gurulaxmi ${((i % 4) + 1)}`,
-  num_contenedor: ['MSMU6181134', 'TGBU5843024', 'MSMU6351035', 'FFAU2236575'][i % 4],
-  estado: ['Pendiente', 'Revisar', 'Urgente'][i % 3],
+  contrato: `EXP/PI-250500${i}`,
+  despacho: 'Despacho Junio',
+  num_contenedor: `${(i % 3) + 1} de 3`,
+  container_info_id: ['MSMU6181134', 'TGBU5843024', 'MSMU6351035', 'FFAU2236575'][i % 4],
+  estado: ['Pendiente', 'Entregado', 'En Tránsito'][i % 3],
   naviera: ['MSC', 'MAERSK', 'CMA-CGM', 'HAMBURG'][i % 4],
   factura: `F-${1000 + i}`,
   llegada_bquilla: new Date(Date.now() - i * 86400000).toISOString(),
-  etd: new Date(Date.now() - (i + 2) * 86400000).toISOString(),
+  etd: new Date(Date.now() - (i + 30) * 86400000).toISOString(),
+  eta: new Date(Date.now() + (i + 10) * 86400000).toISOString(),
   created_at: new Date().toISOString(),
 }));
 
 const columns = [
-  { key: 'num_contenedor', label: 'CONTENEDOR' },
-  { key: 'contrato', label: 'CONTRATO' },
   { key: 'titulo', label: 'TÍTULO' },
-  { key: 'naviera', label: 'NAVIERA' },
-  { key: 'etd', label: 'ETD' },
-  { key: 'estado', label: 'ESTADO' },
   { key: 'proveedor', label: 'PROVEEDOR' },
-  { key: 'llegada_bquilla', label: 'LLEGADA' },
+  { key: 'contrato', label: 'CONTRATO' },
+  { key: 'contenedor', label: 'CONTENEDOR' },
+  { key: 'etd', label: 'ETD' },
+  { key: 'eta', label: 'ETA' },
+  { key: 'llegada_bquilla', label: 'LLEGADA A BARRANQUILLA' },
+  { key: 'naviera', label: 'NAVIERA' },
+  { key: 'estado', label: 'ESTADO' },
 ];
 
 const ApprovalQueue = () => {
@@ -97,7 +103,9 @@ const ApprovalQueue = () => {
     return rows.filter(r =>
       (r.num_contenedor || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.titulo || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (r.naviera || '').toString().toLowerCase().includes(searchTerm.toLowerCase())
+      (r.naviera || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (r.contrato || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (r.proveedor || '').toString().toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [rows, searchTerm]);
 
@@ -105,9 +113,7 @@ const ApprovalQueue = () => {
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const handleApprove = async (row: CorreoRow) => {
-    // Local optimistic update: remove row or mark approved
     setRows(prev => prev.filter(r => r.id !== row.id));
-    // Optionally persist decision to a real approvals table if exists
     try {
       await supabase.from('cnn_correo_tracking').update({ estado: 'Aprobado' }).eq('id', row.id);
     } catch (e) {
@@ -135,20 +141,20 @@ const ApprovalQueue = () => {
           </Button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por contenedor, título o naviera..." className="w-72 pl-9" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }} />
+            <Input placeholder="Buscar por contenedor, contrato, etc..." className="w-72 pl-9" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }} />
           </div>
         </div>
       </div>
 
-      <div className="rounded-md border bg-white h-full flex flex-col">
+      <div className="rounded-md border bg-white h-full flex flex-col overflow-auto">
         <Table>
-          <TableHeader className="bg-gray-50">
+          <TableHeader className="bg-gray-50 sticky top-0 z-10">
             <TableRow>
-              <TableHead className="w-[50px]"><Checkbox /></TableHead>
+              <TableHead className="w-[40px]"><Checkbox /></TableHead>
               {columns.map(col => (
-                <TableHead key={col.key} className="font-bold text-gray-600">{col.label}</TableHead>
+                <TableHead key={col.key} className="font-bold text-gray-600 text-xs uppercase whitespace-nowrap">{col.label}</TableHead>
               ))}
-              <TableHead className="font-bold text-gray-600">ACCIÓN</TableHead>
+              <TableHead className="font-bold text-gray-600 text-xs uppercase">ACCIÓN</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -162,32 +168,75 @@ const ApprovalQueue = () => {
               </TableRow>
             ) : (
               pageRows.map((row) => (
-                <TableRow key={row.id} className="hover:bg-muted/50">
+                <TableRow key={row.id} className="hover:bg-muted/50 text-sm">
                   <TableCell><Checkbox /></TableCell>
-                  <TableCell><div className="font-medium text-primary">{row.num_contenedor || '-'}</div></TableCell>
-                  <TableCell>{row.titulo}</TableCell>
-                  <TableCell>{row.naviera}</TableCell>
-                  <TableCell>{row.etd ? new Date(row.etd).toLocaleDateString() : '-'}</TableCell>
-                  <TableCell>
-                    <Badge className={row.estado === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}>
-                      {row.estado}
-                    </Badge>
-                  </TableCell>
+
+                  {/* TÍTULO */}
+                  <TableCell className="font-medium">{row.titulo}</TableCell>
+
+                  {/* PROVEEDOR */}
                   <TableCell>{row.proveedor}</TableCell>
-                  <TableCell>{row.llegada_bquilla ? new Date(row.llegada_bquilla).toLocaleDateString() : '-'}</TableCell>
+
+                  {/* CONTRATO */}
+                  <TableCell>{row.contrato || '-'}</TableCell>
+
+                  {/* CONTENEDOR */}
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-900">{row.container_info_id || '-'}</span>
+                      <span className="text-xs text-gray-500">{row.num_contenedor}</span>
+                    </div>
+                  </TableCell>
+
+                  {/* ETD */}
+                  <TableCell className="whitespace-nowrap">{row.etd ? new Date(row.etd).toLocaleDateString() : '-'}</TableCell>
+
+                  {/* ETA */}
+                  <TableCell className="whitespace-nowrap">{row.eta ? new Date(row.eta).toLocaleDateString() : '-'}</TableCell>
+
+                  {/* LLEGADA A BARRANQUILLA (Progress) */}
+                  <TableCell className="w-[200px]">
+                    <div className="flex flex-col gap-1 w-full">
+                      <div className="relative h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                        <div className="absolute top-0 left-0 h-full bg-green-500 rounded-full" style={{ width: '80%' }}></div>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-gray-500">
+                        <span>Día 60 de 60</span>
+                      </div>
+                    </div>
+                  </TableCell>
+
+                  {/* NAVIERA */}
+                  <TableCell>{row.naviera}</TableCell>
+
+                  {/* ESTADO */}
+                  <TableCell>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${row.estado === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' :
+                        row.estado === 'Entregado' ? 'bg-green-100 text-green-800' :
+                          'bg-blue-100 text-blue-800'
+                      }`}>
+                      {row.estado || 'Desconocido'}
+                    </span>
+                  </TableCell>
+
+                  {/* ACCIÓN */}
                   <TableCell>
                     <div className="flex gap-2">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button size="sm" variant="ghost" onClick={() => handleReject(row)}>Rechazar</Button>
+                          <Button size="sm" variant="ghost" className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleReject(row)}>
+                            Rechazar
+                          </Button>
                         </TooltipTrigger>
-                        <TooltipContent><p>Marcar como rechazado</p></TooltipContent>
+                        <TooltipContent><p>Rechazar solicitud</p></TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button size="sm" onClick={() => handleApprove(row)}>Aprobar</Button>
+                          <Button size="sm" variant="default" className="bg-slate-900 text-white hover:bg-slate-800 h-8 text-xs" onClick={() => handleApprove(row)}>
+                            Aprobar
+                          </Button>
                         </TooltipTrigger>
-                        <TooltipContent><p>Aprobar y procesar</p></TooltipContent>
+                        <TooltipContent><p>Aprobar solicitud</p></TooltipContent>
                       </Tooltip>
                     </div>
                   </TableCell>
@@ -197,7 +246,7 @@ const ApprovalQueue = () => {
           </TableBody>
         </Table>
 
-        <div className="flex items-center justify-between px-4 py-2 border-t bg-gray-50">
+        <div className="flex items-center justify-between px-4 py-2 border-t bg-gray-50 mt-auto sticky bottom-0">
           <div className="text-sm text-muted-foreground">Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, filtered.length)} de {filtered.length}</div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Anterior</Button>
