@@ -46,10 +46,10 @@ const calculateProgress = (etdStr: string | null, etaStr: string | null) => {
 
     const totalDays = differenceInDays(eta, etd);
     if (totalDays <= 0) return { progress: today >= eta ? 100 : 0, elapsed: 0, total: totalDays, isError: false };
-    
+
     const elapsedDays = differenceInDays(today, etd);
     const progress = Math.min(100, Math.max(0, (elapsedDays / totalDays) * 100));
-    
+
     return { progress, elapsed: elapsedDays, total: totalDays, isError: false };
   } catch (e) {
     return { progress: 0, elapsed: 0, total: 0, isError: true };
@@ -188,7 +188,10 @@ const ContainerTracking = () => {
     try {
       const response = await axios.post("https://n8n.dcmsystem.co/webhook/cannon-container-tracking", {
         container_number: containerNumber,
-        source: "dcm-test",
+        source: "dcm-production",
+        client_reference: "DCM-2025-001"
+
+
       }, {
         headers: {
           "Content-Type": "application/json",
@@ -242,7 +245,7 @@ const ContainerTracking = () => {
               <TableHead className="text-[#6b7280] font-bold">DESPACHO</TableHead>
               <TableHead className="text-[#6b7280] font-bold">CONTENEDOR</TableHead>
               <TableHead className="text-[#6b7280] font-bold">ETD</TableHead>
-             
+
               <TableHead className="text-[#6b7280] font-bold">ETA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">LLEGADA A BARRANQUILLA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">FACTURA</TableHead>
@@ -292,7 +295,7 @@ const ContainerTracking = () => {
                     </TableCell>
                     <TableCell>
                       <button title="Ver detalle" onClick={() => handleContainerClick(row.num_contenedor)} className="hover:bg-gray-100 rounded-full p-1">
-                        <svg width="18" height="18" fill="none" stroke="#e11d48" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z"/></svg>
+                        <svg width="18" height="18" fill="none" stroke="#e11d48" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z" /></svg>
                       </button>
                     </TableCell>
                   </TableRow>
