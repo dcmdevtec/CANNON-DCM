@@ -37,9 +37,9 @@ const fakeData: CorreoRow[] = Array.from({ length: 12 }).map((_, i) => ({
   id: i + 1,
   titulo: `16/1 RIZO ${i + 1}`,
   proveedor: `Gurulaxmi ${((i % 4) + 1)}`,
-  num_contenedor: ['MSMU6181134','TGBU5843024','MSMU6351035','FFAU2236575'][i % 4],
-  estado: ['Pendiente','Revisar','Urgente'][i % 3],
-  naviera: ['MSC','MAERSK','CMA-CGM','HAMBURG'][i % 4],
+  num_contenedor: ['MSMU6181134', 'TGBU5843024', 'MSMU6351035', 'FFAU2236575'][i % 4],
+  estado: ['Pendiente', 'Revisar', 'Urgente'][i % 3],
+  naviera: ['MSC', 'MAERSK', 'CMA-CGM', 'HAMBURG'][i % 4],
   factura: `F-${1000 + i}`,
   llegada_bquilla: new Date(Date.now() - i * 86400000).toISOString(),
   etd: new Date(Date.now() - (i + 2) * 86400000).toISOString(),
@@ -162,7 +162,7 @@ const ApprovalQueue = () => {
               </TableRow>
             ) : (
               pageRows.map((row) => (
-                  <TableRow key={row.id} className="hover:bg-muted/50">
+                <TableRow key={row.id} className="hover:bg-muted/50">
                   <TableCell><Checkbox /></TableCell>
                   <TableCell><div className="font-medium text-primary">{row.num_contenedor || '-'}</div></TableCell>
                   <TableCell>{row.titulo}</TableCell>
