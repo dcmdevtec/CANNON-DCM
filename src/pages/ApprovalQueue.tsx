@@ -13,8 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Search, Upload } from 'lucide-react';
-import ExcelUploadModal from '@/components/ExcelUploadModal';
+import { Search } from 'lucide-react';
 
 type CorreoRow = {
   id: number;
@@ -68,7 +67,6 @@ const ApprovalQueue = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const pageSize = 6;
 
   const fetchData = useCallback(async () => {
@@ -135,10 +133,6 @@ const ApprovalQueue = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Módulo de Aprobaciones</h1>
         <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => setIsModalOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Subir Excel
-          </Button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar por contenedor, contrato, etc..." className="w-72 pl-9" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }} />
@@ -255,14 +249,6 @@ const ApprovalQueue = () => {
           </div>
         </div>
       </div>
-      <ExcelUploadModal
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => {
-          fetchData();
-          setIsModalOpen(false);
-        }}
-      />
     </div>
   );
 };

@@ -1,3 +1,21 @@
+import { useEffect, useState, useMemo } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Upload } from 'lucide-react';
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { parseISO, differenceInDays, format } from 'date-fns';
+import TransitProgressBar from "@/components/TransitProgressBar";
+import axios from "axios"; // Import axios for making HTTP requests
+import ExcelUploadModal from "@/components/ExcelUploadModal";
+
 // Traducción de estados de tracking
 const statusTranslations: Record<string, string> = {
   "Export received at CY": "Recibido para exportación en CY",
@@ -13,20 +31,6 @@ function translateStatus(status: string | null | undefined): string {
   if (!status) return "-";
   return statusTranslations[status] || status;
 }
-import { useEffect, useState, useMemo } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
-import { parseISO, differenceInDays, format } from 'date-fns';
-import TransitProgressBar from "@/components/TransitProgressBar";
-import axios from "axios"; // Import axios for making HTTP requests
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-';
@@ -61,20 +65,17 @@ const ContainerTracking = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState('Todos');
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      const { data, error } = await supabase.from("cnn_container_factura_view").select("*");
-      if (error) {
-        console.error("Error fetching contenedores:", error);
-        setFacturas([]);
-        setLoading(false);
-        return;
-      }
-      // Ordenar igual que antes
-      const sortedData = data.sort((a, b) => {
+  const fetchData = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("cnn_container_factura_view").select("*");
+    if (error) {
+      console.error("Error fetching contenedores:", error);
+      setFacturas([]);
+    } else {
+       const sortedData = data.sort((a, b) => {
         if (a.contrato < b.contrato) return -1;
         if (a.contrato > b.contrato) return 1;
         const seqA = parseInt(a.contenedor?.split(' ')[0] || '0');
@@ -82,8 +83,11 @@ const ContainerTracking = () => {
         return seqA - seqB;
       });
       setFacturas(sortedData);
-      setLoading(false);
-    };
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchData();
   }, []);
 
@@ -208,7 +212,23 @@ const ContainerTracking = () => {
   };
 
   return (
-    <div className="p-4 min-h-screen bg-[#f6f7fa]">
+    <div className="p-6 min-h-screen bg-[#f6f7fa]">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-3xl font-bold">Seguimiento de Contenedores</h1>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => setIsModalOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Subir Excel
+          </Button>
+          <input
+            type="text"
+            className="border rounded px-3 py-2 w-72 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+            placeholder="Buscar por contenedor, contrato, etc..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
       <div className="flex gap-2 mb-2">
         <button
           className={`px-4 py-1 rounded-t-md border border-b-0 ${activeTab === 'Todos' ? 'bg-white font-bold text-[#222] shadow-sm' : 'bg-[#f6f7fa] text-[#222] hover:bg-white'}`}
@@ -225,14 +245,6 @@ const ContainerTracking = () => {
             {e} ({counts[e as keyof typeof counts]})
           </button>
         ))}
-        <div className="flex-1"></div>
-        <input
-          type="text"
-          className="border rounded px-3 py-1 w-72 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
-          placeholder="Buscar por contenedor, contrato, etc..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
       </div>
       <div className="rounded-md border bg-white">
         <Table>
@@ -319,6 +331,14 @@ const ContainerTracking = () => {
           disabled={page === totalPages}
         >Siguiente</button>
       </div>
+      <ExcelUploadModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => {
+          fetchData();
+          setIsModalOpen(false);
+        }}
+      />
     </div>
   );
 };
