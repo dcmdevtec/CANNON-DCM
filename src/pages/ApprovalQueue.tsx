@@ -13,7 +13,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Search } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 type CorreoRow = {
   id: number;
@@ -63,10 +72,14 @@ const columns = [
 ];
 
 const ApprovalQueue = () => {
+  const { toast } = useToast();
   const [rows, setRows] = useState<CorreoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<CorreoRow | null>(null);
+  const [approving, setApproving] = useState(false);
   const pageSize = 6;
 
   const fetchData = useCallback(async () => {
@@ -110,12 +123,62 @@ const ApprovalQueue = () => {
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleApprove = async (row: CorreoRow) => {
-    setRows(prev => prev.filter(r => r.id !== row.id));
+  const openApprovalDialog = (row: CorreoRow) => {
+    setSelectedRow(row);
+    setConfirmDialogOpen(true);
+  };
+
+  const handleApprove = async () => {
+    if (!selectedRow) return;
+    setApproving(true);
     try {
-      await supabase.from('cnn_correo_tracking').update({ estado: 'Aprobado' }).eq('id', row.id);
+      // 1. Update cnn_correo_tracking
+      await supabase.from('cnn_correo_tracking').update({ estado: 'Aprobado' }).eq('id', selectedRow.id);
+
+      // 2. Prepare data
+      const etdDate = selectedRow.etd ? new Date(selectedRow.etd) : null;
+      const etaDate = selectedRow.eta ? new Date(selectedRow.eta) : null;
+      let diasTransito = null;
+      if (etdDate && etaDate) {
+        diasTransito = Math.ceil((etaDate.getTime() - etdDate.getTime()) / (1000 * 60 * 60 * 24));
+      }
+
+      // 3. Insert in cnn_factura_tracking
+      await supabase.from('cnn_factura_tracking').insert({
+        titulo: selectedRow.titulo || null,
+        proveedor: selectedRow.proveedor || null,
+        contrato: selectedRow.contrato || null,
+        despacho: selectedRow.despacho || null,
+        num_contenedor: selectedRow.container_info_id || null,
+        llegada_bquilla: selectedRow.llegada_bquilla ? new Date(selectedRow.llegada_bquilla).toISOString().split('T')[0] : null,
+        contenedor: selectedRow.num_contenedor || null,
+        estado: 'Aprobado',
+        naviera: selectedRow.naviera || null,
+        factura: selectedRow.factura || null,
+        etd: etdDate ? etdDate.toISOString().split('T')[0] : null,
+        eta: etaDate ? etaDate.toISOString().split('T')[0] : null,
+        dias_transito: diasTransito,
+        container_info_id: null,
+      });
+
+      // 4. Insert/check in cnn_container_tracking
+      const containerNumber = selectedRow.container_info_id;
+      if (containerNumber) {
+        const { data: existing } = await supabase.from('cnn_container_tracking').select('id').eq('container_number', containerNumber).single();
+        if (!existing) {
+          await supabase.from('cnn_container_tracking').insert([{ container_number: containerNumber }]);
+        }
+      }
+
+      setRows(prev => prev.filter(r => r.id !== selectedRow.id));
+      toast({ title: 'Aprobado', description: 'La solicitud ha sido aprobada exitosamente' });
+      setConfirmDialogOpen(false);
+      setSelectedRow(null);
     } catch (e) {
-      console.error('Error updating estado:', e);
+      console.error('Error:', e);
+      toast({ title: 'Error', description: 'Ocurrió un error', variant: 'destructive' });
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -206,8 +269,8 @@ const ApprovalQueue = () => {
                   {/* ESTADO */}
                   <TableCell>
                     <span className={`text-xs font-medium px-2 py-1 rounded-full ${row.estado === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' :
-                        row.estado === 'Entregado' ? 'bg-green-100 text-green-800' :
-                          'bg-blue-100 text-blue-800'
+                      row.estado === 'Entregado' ? 'bg-green-100 text-green-800' :
+                        'bg-blue-100 text-blue-800'
                       }`}>
                       {row.estado || 'Desconocido'}
                     </span>
@@ -226,7 +289,7 @@ const ApprovalQueue = () => {
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button size="sm" variant="default" className="bg-slate-900 text-white hover:bg-slate-800 h-8 text-xs" onClick={() => handleApprove(row)}>
+                          <Button size="sm" variant="default" className="bg-slate-900 text-white hover:bg-slate-800 h-8 text-xs" onClick={() => openApprovalDialog(row)}>
                             Aprobar
                           </Button>
                         </TooltipTrigger>
@@ -249,6 +312,30 @@ const ApprovalQueue = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal de Confirmación */}
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Aprobación</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas aprobar esta solicitud?
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRow && (
+            <div className="grid gap-2 py-4 text-sm">
+              <div><strong>Contenedor:</strong> {selectedRow.container_info_id}</div>
+              <div><strong>Contrato:</strong> {selectedRow.contrato}</div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDialogOpen(false)} disabled={approving}>Cancelar</Button>
+            <Button onClick={handleApprove} disabled={approving} className="bg-slate-900 text-white">
+              {approving ? 'Aprobando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
