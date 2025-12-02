@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Upload } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { DatePickerWithRange } from "@/components/ui/date-picker-with-range";
 import { parseISO, differenceInDays, format } from 'date-fns';
+import { DateRange } from "react-day-picker";
 import TransitProgressBar from "@/components/TransitProgressBar";
 import axios from "axios"; // Import axios for making HTTP requests
 import ExcelUploadModal from "@/components/ExcelUploadModal";
@@ -66,7 +68,19 @@ const ContainerTracking = () => {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState('Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: string } | null>(null);
+  const [titleFilter, setTitleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const navigate = useNavigate();
+
+  const requestSort = (key: string) => {
+    let direction = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -123,23 +137,73 @@ const ContainerTracking = () => {
   const [page, setPage] = useState(1);
   const filteredFacturas = useMemo(() => {
     setPage(1); // Reinicia a la página 1 si cambian los filtros
-    return facturas.filter(f => {
-      const tabCat = getTabCategory(f);
-      const inTab = activeTab === 'Todos' || tabCat === activeTab;
-      const inSearch = () => {
-        const q = search.trim().toLowerCase();
-        if (!q) return true;
-        return (
-          (f.num_contenedor || "").toLowerCase().includes(q) ||
-          (f.contrato || "").toLowerCase().includes(q) ||
-          (f.proveedor || "").toLowerCase().includes(q) ||
-          (f.titulo || "").toLowerCase().includes(q) ||
-          (f.estado || "").toLowerCase().includes(q)
-        );
-      };
-      return inTab && inSearch();
+
+    const lowerSearch = search.trim().toLowerCase();
+
+    const items = facturas.filter(f => {
+        // Tab filter
+        const tabCat = getTabCategory(f);
+        const inTab = activeTab === 'Todos' || tabCat === activeTab;
+        if (!inTab) return false;
+
+        // General search
+        if (lowerSearch) {
+            const inSearch =
+                (f.num_contenedor || "").toLowerCase().includes(lowerSearch) ||
+                (f.contrato || "").toLowerCase().includes(lowerSearch) ||
+                (f.proveedor || "").toLowerCase().includes(lowerSearch) ||
+                (f.titulo || "").toLowerCase().includes(lowerSearch) ||
+                (f.estado || "").toLowerCase().includes(lowerSearch);
+            if (!inSearch) return false;
+        }
+
+        // Advanced filters for 'Todos' tab
+        if (activeTab === 'Todos') {
+            if (titleFilter && !(f.titulo || "").toLowerCase().includes(titleFilter.toLowerCase())) {
+                return false;
+            }
+            if (statusFilter && !(f.estado || "").toLowerCase().includes(statusFilter.toLowerCase())) {
+                return false;
+            }
+            if (dateRange?.from) {
+                const from = dateRange.from;
+                const to = dateRange.to || from;
+
+                const etd = f.etd ? parseISO(f.etd) : null;
+                const eta = f.eta ? parseISO(f.eta) : null;
+
+                const etdInRange = etd && etd >= from && etd <= to;
+                const etaInRange = eta && eta >= from && eta <= to;
+
+                if (!(etdInRange || etaInRange)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     });
-  }, [facturas, activeTab, search]);
+
+    if (sortConfig !== null) {
+      items.sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (aValue === null || aValue === undefined) return 1;
+        if (bValue === null || bValue === undefined) return -1;
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return items;
+}, [facturas, activeTab, search, sortConfig, titleFilter, statusFilter, dateRange]);
 
   const totalPages = Math.ceil(filteredFacturas.length / ROWS_PER_PAGE) || 1;
   const paginatedFacturas = useMemo(() => {
@@ -186,6 +250,13 @@ const ContainerTracking = () => {
   }, [filteredFacturas]);
 
   const estados = ['En Tránsito', 'En Puerto', 'Entregado'];
+
+  const getSortIndicator = (key: string) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return null;
+    }
+    return sortConfig.direction === 'ascending' ? ' 🔼' : ' 🔽';
+  };
 
   const handleContainerClick = async (containerNumber) => {
     setLoading(true); // Show loading indicator
@@ -246,23 +317,57 @@ const ContainerTracking = () => {
           </button>
         ))}
       </div>
+      {activeTab === 'Todos' && (
+        <div className="flex items-center gap-4 mb-4 p-4 bg-gray-50 rounded-md border">
+            <input
+                type="text"
+                placeholder="Filtrar por título..."
+                className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+                value={titleFilter}
+                onChange={e => setTitleFilter(e.target.value)}
+            />
+            <input
+                type="text"
+                placeholder="Filtrar por estado..."
+                className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+            />
+            <DatePickerWithRange
+                date={dateRange}
+                setDate={setDateRange}
+            />
+            <Button variant="outline" onClick={() => {
+                setTitleFilter('');
+                setStatusFilter('');
+                setDateRange(undefined);
+            }}>Limpiar filtros</Button>
+        </div>
+      )}
       <div className="rounded-md border bg-white">
         <Table>
           <TableHeader className="bg-[#f6f7fa]">
             <TableRow>
               <TableHead className="w-[40px]"><input type="checkbox" /></TableHead>
-              <TableHead className="text-[#6b7280] font-bold">TÍTULO</TableHead>
+              <TableHead className="text-[#6b7280] font-bold">
+                <button onClick={() => requestSort('titulo')}>TÍTULO{getSortIndicator('titulo')}</button>
+              </TableHead>
               <TableHead className="text-[#6b7280] font-bold">PROVEEDOR</TableHead>
               <TableHead className="text-[#6b7280] font-bold">CONTRATO</TableHead>
               <TableHead className="text-[#6b7280] font-bold">DESPACHO</TableHead>
               <TableHead className="text-[#6b7280] font-bold">CONTENEDOR</TableHead>
-              <TableHead className="text-[#6b7280] font-bold">ETD</TableHead>
-
-              <TableHead className="text-[#6b7280] font-bold">ETA</TableHead>
+              <TableHead className="text-[#6b7280] font-bold">
+                <button onClick={() => requestSort('etd')}>ETD{getSortIndicator('etd')}</button>
+              </TableHead>
+              <TableHead className="text-[#6b7280] font-bold">
+                <button onClick={() => requestSort('eta')}>ETA{getSortIndicator('eta')}</button>
+              </TableHead>
               <TableHead className="text-[#6b7280] font-bold">LLEGADA A BARRANQUILLA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">FACTURA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">NAVIERA</TableHead>
-              <TableHead className="text-[#6b7280] font-bold">ESTADO</TableHead>
+              <TableHead className="text-[#6b7280] font-bold">
+                <button onClick={() => requestSort('estado')}>ESTADO{getSortIndicator('estado')}</button>
+              </TableHead>
               <TableHead className="text-[#6b7280] font-bold">ACCIÓN</TableHead>
             </TableRow>
           </TableHeader>
