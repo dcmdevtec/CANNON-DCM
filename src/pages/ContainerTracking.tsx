@@ -8,15 +8,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Upload } from 'lucide-react';
+import { Upload, RefreshCw, Eye } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { DatePickerWithRange } from "@/components/ui/date-picker-with-range";
-import { parseISO, differenceInDays, format } from 'date-fns';
+import { parseISO, differenceInDays, format, differenceInHours } from 'date-fns';
 import { DateRange } from "react-day-picker";
 import TransitProgressBar from "@/components/TransitProgressBar";
 import axios from "axios"; // Import axios for making HTTP requests
 import ExcelUploadModal from "@/components/ExcelUploadModal";
+import { toast } from "sonner";
 
 // Traducción de estados de tracking
 const statusTranslations: Record<string, string> = {
@@ -89,7 +90,7 @@ const ContainerTracking = () => {
       console.error("Error fetching contenedores:", error);
       setFacturas([]);
     } else {
-       const sortedData = data.sort((a, b) => {
+      const sortedData = data.sort((a, b) => {
         if (a.contrato < b.contrato) return -1;
         if (a.contrato > b.contrato) return 1;
         const seqA = parseInt(a.contenedor?.split(' ')[0] || '0');
@@ -141,47 +142,47 @@ const ContainerTracking = () => {
     const lowerSearch = search.trim().toLowerCase();
 
     const items = facturas.filter(f => {
-        // Tab filter
-        const tabCat = getTabCategory(f);
-        const inTab = activeTab === 'Todos' || tabCat === activeTab;
-        if (!inTab) return false;
+      // Tab filter
+      const tabCat = getTabCategory(f);
+      const inTab = activeTab === 'Todos' || tabCat === activeTab;
+      if (!inTab) return false;
 
-        // General search
-        if (lowerSearch) {
-            const inSearch =
-                (f.num_contenedor || "").toLowerCase().includes(lowerSearch) ||
-                (f.contrato || "").toLowerCase().includes(lowerSearch) ||
-                (f.proveedor || "").toLowerCase().includes(lowerSearch) ||
-                (f.titulo || "").toLowerCase().includes(lowerSearch) ||
-                (f.estado || "").toLowerCase().includes(lowerSearch);
-            if (!inSearch) return false;
+      // General search
+      if (lowerSearch) {
+        const inSearch =
+          (f.num_contenedor || "").toLowerCase().includes(lowerSearch) ||
+          (f.contrato || "").toLowerCase().includes(lowerSearch) ||
+          (f.proveedor || "").toLowerCase().includes(lowerSearch) ||
+          (f.titulo || "").toLowerCase().includes(lowerSearch) ||
+          (f.estado || "").toLowerCase().includes(lowerSearch);
+        if (!inSearch) return false;
+      }
+
+      // Advanced filters for 'Todos' tab
+      if (activeTab === 'Todos') {
+        if (titleFilter && !(f.titulo || "").toLowerCase().includes(titleFilter.toLowerCase())) {
+          return false;
         }
-
-        // Advanced filters for 'Todos' tab
-        if (activeTab === 'Todos') {
-            if (titleFilter && !(f.titulo || "").toLowerCase().includes(titleFilter.toLowerCase())) {
-                return false;
-            }
-            if (statusFilter && !(f.estado || "").toLowerCase().includes(statusFilter.toLowerCase())) {
-                return false;
-            }
-            if (dateRange?.from) {
-                const from = dateRange.from;
-                const to = dateRange.to || from;
-
-                const etd = f.etd ? parseISO(f.etd) : null;
-                const eta = f.eta ? parseISO(f.eta) : null;
-
-                const etdInRange = etd && etd >= from && etd <= to;
-                const etaInRange = eta && eta >= from && eta <= to;
-
-                if (!(etdInRange || etaInRange)) {
-                    return false;
-                }
-            }
+        if (statusFilter && !(f.estado || "").toLowerCase().includes(statusFilter.toLowerCase())) {
+          return false;
         }
+        if (dateRange?.from) {
+          const from = dateRange.from;
+          const to = dateRange.to || from;
 
-        return true;
+          const etd = f.etd ? parseISO(f.etd) : null;
+          const eta = f.eta ? parseISO(f.eta) : null;
+
+          const etdInRange = etd && etd >= from && etd <= to;
+          const etaInRange = eta && eta >= from && eta <= to;
+
+          if (!(etdInRange || etaInRange)) {
+            return false;
+          }
+        }
+      }
+
+      return true;
     });
 
     if (sortConfig !== null) {
@@ -203,7 +204,7 @@ const ContainerTracking = () => {
     }
 
     return items;
-}, [facturas, activeTab, search, sortConfig, titleFilter, statusFilter, dateRange]);
+  }, [facturas, activeTab, search, sortConfig, titleFilter, statusFilter, dateRange]);
 
   const totalPages = Math.ceil(filteredFacturas.length / ROWS_PER_PAGE) || 1;
   const paginatedFacturas = useMemo(() => {
@@ -243,9 +244,6 @@ const ContainerTracking = () => {
       // Usar num_contenedor como clave única
       map.set(factura.num_contenedor, contractToColor.get(contractKey));
     });
-    // Log para depuración
-    console.log('CONTRACT COLOR MAP:', Array.from(contractToColor.entries()));
-    console.log('CONTENEDOR TO COLOR:', Array.from(map.entries()));
     return map;
   }, [filteredFacturas]);
 
@@ -258,27 +256,42 @@ const ContainerTracking = () => {
     return sortConfig.direction === 'ascending' ? ' 🔼' : ' 🔽';
   };
 
-  const handleContainerClick = async (containerNumber) => {
-    setLoading(true); // Show loading indicator
+  // Función solo para navegar al detalle
+  const handleViewDetail = (containerNumber: string) => {
+    navigate(`/container-detail/${containerNumber}`);
+  };
+
+  // Función para actualizar tracking con cooldown de 24h
+  const handleUpdateTracking = async (containerNumber: string, lastUpdate: string | null) => {
+    if (lastUpdate) {
+      const hoursDiff = differenceInHours(new Date(), parseISO(lastUpdate));
+      if (hoursDiff < 24) {
+        toast.error(`Debe esperar 24 horas para actualizar nuevamente. Última actualización: ${hoursDiff} horas.`);
+        return;
+      }
+    }
+
+    setLoading(true);
     try {
       const response = await axios.post("https://n8n.dcmsystem.co/webhook/cannon-container-tracking", {
         container_number: containerNumber,
         source: "dcm-production",
         client_reference: "DCM-2025-001"
-
-
       }, {
         headers: {
           "Content-Type": "application/json",
           "X-Webhook-Secret": "dcm_webhook_secret_2024",
         },
       });
-      console.log("Response from N8N webhook:", response.data); // Log the response for testing
-      setLoading(false); // Hide loading indicator after successful response
-      navigate(`/container-detail/${containerNumber}`); // Navigate to container details
+      console.log("Response from N8N webhook:", response.data);
+      toast.success("Actualización solicitada correctamente");
+      // Opcional: recargar datos para ver si cambió algo inmediatamente (aunque suele ser asíncrono)
+      // fetchData(); 
     } catch (error) {
       console.error("Error sending container number to N8N:", error);
-      setLoading(false); // Hide loading indicator in case of error
+      toast.error("Error al solicitar actualización");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -319,29 +332,29 @@ const ContainerTracking = () => {
       </div>
       {activeTab === 'Todos' && (
         <div className="flex items-center gap-4 mb-4 p-4 bg-gray-50 rounded-md border">
-            <input
-                type="text"
-                placeholder="Filtrar por título..."
-                className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
-                value={titleFilter}
-                onChange={e => setTitleFilter(e.target.value)}
-            />
-            <input
-                type="text"
-                placeholder="Filtrar por estado..."
-                className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-            />
-            <DatePickerWithRange
-                date={dateRange}
-                setDate={setDateRange}
-            />
-            <Button variant="outline" onClick={() => {
-                setTitleFilter('');
-                setStatusFilter('');
-                setDateRange(undefined);
-            }}>Limpiar filtros</Button>
+          <input
+            type="text"
+            placeholder="Filtrar por título..."
+            className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+            value={titleFilter}
+            onChange={e => setTitleFilter(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Filtrar por estado..."
+            className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+          />
+          <DatePickerWithRange
+            date={dateRange}
+            setDate={setDateRange}
+          />
+          <Button variant="outline" onClick={() => {
+            setTitleFilter('');
+            setStatusFilter('');
+            setDateRange(undefined);
+          }}>Limpiar filtros</Button>
         </div>
       )}
       <div className="rounded-md border bg-white">
@@ -393,8 +406,8 @@ const ContainerTracking = () => {
                     <TableCell>{row.despacho}</TableCell>
                     <TableCell>
                       <div
-                        className="font-medium text-[#222] cursor-pointer"
-                        onClick={() => handleContainerClick(row.num_contenedor)}
+                        className="font-medium text-[#222] cursor-pointer hover:underline"
+                        onClick={() => handleViewDetail(row.num_contenedor)}
                       >
                         {row.num_contenedor}
                       </div>
@@ -411,9 +424,22 @@ const ContainerTracking = () => {
                       {row.entregado ? 'Entregado' : translateStatus(row.estado)}
                     </TableCell>
                     <TableCell>
-                      <button title="Ver detalle" onClick={() => handleContainerClick(row.num_contenedor)} className="hover:bg-gray-100 rounded-full p-1">
-                        <svg width="18" height="18" fill="none" stroke="#e11d48" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z" /></svg>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          title="Ver detalle"
+                          onClick={() => handleViewDetail(row.num_contenedor)}
+                          className="hover:bg-gray-100 rounded-full p-1"
+                        >
+                          <Eye className="h-4 w-4 text-blue-600" />
+                        </button>
+                        <button
+                          title="Actualizar Tracking"
+                          onClick={() => handleUpdateTracking(row.num_contenedor, row.updated_at)}
+                          className="hover:bg-gray-100 rounded-full p-1"
+                        >
+                          <RefreshCw className={`h-4 w-4 text-green-600 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
