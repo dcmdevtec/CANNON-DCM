@@ -359,7 +359,7 @@ const Dashboard = () => {
                   <TableHead>Secuencia</TableHead>
                   <TableHead>Naviera</TableHead>
                   <TableHead>Proveedor</TableHead>
-                  <TableHead>Puerto</TableHead>
+                  <TableHead>Estado</TableHead>
 
                   {/* Columnas opcionales si existen en los datos */}
                   {selectedData.some(d => d.titulo) && <TableHead>Título</TableHead>}
@@ -373,7 +373,7 @@ const Dashboard = () => {
                     <TableCell>{item.contenedor || '-'}</TableCell>
                     <TableCell>{item.naviera || '-'}</TableCell>
                     <TableCell>{item.proveedor || '-'}</TableCell>
-                    <TableCell>{item.puerto || '-'}</TableCell>
+                    <TableCell>{item.estado || '-'}</TableCell>
 
                     {selectedData.some(d => d.titulo) && <TableCell>{item.titulo || '-'}</TableCell>}
                     {selectedData.some(d => d.hilaza) && <TableCell>{item.hilaza || '-'}</TableCell>}
