@@ -85,20 +85,62 @@ const ContainerTracking = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("cnn_container_factura_view").select("*");
-    if (error) {
-      console.error("Error fetching contenedores:", error);
+
+    // Primero obtenemos los datos de la vista
+    const { data: viewData, error: viewError } = await supabase
+      .from("cnn_container_factura_view")
+      .select("*");
+
+    if (viewError) {
+      console.error("Error fetching contenedores:", viewError);
       setFacturas([]);
-    } else {
-      const sortedData = data.sort((a, b) => {
-        if (a.contrato < b.contrato) return -1;
-        if (a.contrato > b.contrato) return 1;
-        const seqA = parseInt(a.contenedor?.split(' ')[0] || '0');
-        const seqB = parseInt(b.contenedor?.split(' ')[0] || '0');
-        return seqA - seqB;
-      });
-      setFacturas(sortedData);
+      setLoading(false);
+      return;
     }
+
+    // Luego obtenemos el último evento de cada contenedor
+    const { data: eventsData, error: eventsError } = await supabase
+      .from("cnn_container_tracking")
+      .select(`
+        container_number,
+        cnn_container_events(created_at)
+      `);
+
+    if (eventsError) {
+      console.error("Error fetching events:", eventsError);
+    }
+
+    // Crear un mapa de num_contenedor -> último created_at
+    const lastEventMap = new Map();
+    if (eventsData) {
+      eventsData.forEach((item: any) => {
+        const containerNum = item.container_number;
+        const events = item.cnn_container_events;
+        if (events && events.length > 0) {
+          // Encontrar el evento más reciente
+          const latestEvent = events.reduce((latest: any, current: any) => {
+            return new Date(current.created_at) > new Date(latest.created_at) ? current : latest;
+          });
+          lastEventMap.set(containerNum, latestEvent.created_at);
+        }
+      });
+    }
+
+    // Combinar los datos
+    const enrichedData = viewData.map((row: any) => ({
+      ...row,
+      last_event_created_at: lastEventMap.get(row.num_contenedor) || null
+    }));
+
+    const sortedData = enrichedData.sort((a, b) => {
+      if (a.contrato < b.contrato) return -1;
+      if (a.contrato > b.contrato) return 1;
+      const seqA = parseInt(a.contenedor?.split(' ')[0] || '0');
+      const seqB = parseInt(b.contenedor?.split(' ')[0] || '0');
+      return seqA - seqB;
+    });
+
+    setFacturas(sortedData);
     setLoading(false);
   };
 
@@ -266,7 +308,7 @@ const ContainerTracking = () => {
     if (lastUpdate) {
       const hoursDiff = differenceInHours(new Date(), parseISO(lastUpdate));
       if (hoursDiff < 24) {
-        toast.error(`Debe esperar 24 horas para actualizar nuevamente. Última actualización: ${hoursDiff} horas.`);
+        toast.error(`Debe esperar 24 horas para actualizar nuevamente. Última actualización hace ${Math.floor(hoursDiff)} horas.`);
         return;
       }
     }
@@ -397,6 +439,23 @@ const ContainerTracking = () => {
             ) : (
               paginatedFacturas.map((row) => {
                 const { progress, elapsed, total, isError } = calculateProgress(row.etd, row.eta);
+
+                // Calcular si el botón debe estar deshabilitado
+                const lastUpdate = row.last_event_created_at;
+                let isUpdateDisabled = false;
+                let tooltipText = "Actualizar Tracking";
+                let hoursRemaining = 0;
+
+                if (lastUpdate) {
+                  const hoursDiff = differenceInHours(new Date(), parseISO(lastUpdate));
+                  hoursRemaining = 24 - hoursDiff;
+                  isUpdateDisabled = hoursDiff < 24;
+
+                  if (isUpdateDisabled) {
+                    tooltipText = `Debe esperar ${Math.ceil(hoursRemaining)} horas para actualizar`;
+                  }
+                }
+
                 return (
                   <TableRow key={row.num_contenedor} className={contractColorMap.get(row.num_contenedor)}>
                     <TableCell><input type="checkbox" /></TableCell>
@@ -433,11 +492,16 @@ const ContainerTracking = () => {
                           <Eye className="h-4 w-4 text-blue-600" />
                         </button>
                         <button
-                          title="Actualizar Tracking"
-                          onClick={() => handleUpdateTracking(row.num_contenedor, row.updated_at)}
-                          className="hover:bg-gray-100 rounded-full p-1"
+                          title={tooltipText}
+                          onClick={() => handleUpdateTracking(row.num_contenedor, row.last_event_created_at)}
+                          disabled={isUpdateDisabled}
+                          className={`rounded-full p-1 ${isUpdateDisabled
+                              ? 'opacity-40 cursor-not-allowed'
+                              : 'hover:bg-gray-100 cursor-pointer'
+                            }`}
                         >
-                          <RefreshCw className={`h-4 w-4 text-green-600 ${loading ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`h-4 w-4 ${isUpdateDisabled ? 'text-gray-400' : 'text-green-600'
+                            } ${loading ? 'animate-spin' : ''}`} />
                         </button>
                       </div>
                     </TableCell>
