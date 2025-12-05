@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Upload, RefreshCw, Eye } from 'lucide-react';
+import { Upload, RefreshCw, Eye, Edit, Save, X } from 'lucide-react'; // Added Edit, Save, X icons
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { DatePickerWithRange } from "@/components/ui/date-picker-with-range";
@@ -18,6 +18,8 @@ import TransitProgressBar from "@/components/TransitProgressBar";
 import axios from "axios"; // Import axios for making HTTP requests
 import ExcelUploadModal from "@/components/ExcelUploadModal";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input"; // Import Input component
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
 
 // Traducción de estados de tracking
 const statusTranslations: Record<string, string> = {
@@ -75,6 +77,10 @@ const ContainerTracking = () => {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const navigate = useNavigate();
 
+  // State for inline editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editedRow, setEditedRow] = useState<any | null>(null);
+
   const requestSort = (key: string) => {
     let direction = 'ascending';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -103,25 +109,29 @@ const ContainerTracking = () => {
       .from("cnn_container_tracking")
       .select(`
         container_number,
-        cnn_container_events(created_at)
+        cnn_container_events(created_at, updated_at, event_datetime)
       `);
 
     if (eventsError) {
       console.error("Error fetching events:", eventsError);
     }
 
-    // Crear un mapa de num_contenedor -> último created_at
+    // Crear un mapa de num_contenedor -> última actualización
     const lastEventMap = new Map();
     if (eventsData) {
       eventsData.forEach((item: any) => {
         const containerNum = item.container_number;
         const events = item.cnn_container_events;
         if (events && events.length > 0) {
-          // Encontrar el evento más reciente
+          // Encontrar el evento más reciente basado en updated_at, event_datetime o created_at
           const latestEvent = events.reduce((latest: any, current: any) => {
-            return new Date(current.created_at) > new Date(latest.created_at) ? current : latest;
+            const currentDate = new Date(current.updated_at || current.event_datetime || current.created_at);
+            const latestDate = new Date(latest.updated_at || latest.event_datetime || latest.created_at);
+            return currentDate > latestDate ? current : latest;
           });
-          lastEventMap.set(containerNum, latestEvent.created_at);
+          // Usar updated_at si está disponible, sino event_datetime, sino created_at
+          const lastUpdate = latestEvent.updated_at || latestEvent.event_datetime || latestEvent.created_at;
+          lastEventMap.set(containerNum, lastUpdate);
         }
       });
     }
@@ -200,27 +210,25 @@ const ContainerTracking = () => {
         if (!inSearch) return false;
       }
 
-      // Advanced filters for 'Todos' tab
-      if (activeTab === 'Todos') {
-        if (titleFilter && !(f.titulo || "").toLowerCase().includes(titleFilter.toLowerCase())) {
+      // Advanced filters (now always visible, apply to all tabs)
+      if (titleFilter && !(f.titulo || "").toLowerCase().includes(titleFilter.toLowerCase())) {
+        return false;
+      }
+      if (statusFilter && !(f.estado || "").toLowerCase().includes(statusFilter.toLowerCase())) {
+        return false;
+      }
+      if (dateRange?.from) {
+        const from = dateRange.from;
+        const to = dateRange.to || from;
+
+        const etd = f.etd ? parseISO(f.etd) : null;
+        const eta = f.eta ? parseISO(f.eta) : null;
+
+        const etdInRange = etd && etd >= from && etd <= to;
+        const etaInRange = eta && eta >= from && eta <= to;
+
+        if (!(etdInRange || etaInRange)) {
           return false;
-        }
-        if (statusFilter && !(f.estado || "").toLowerCase().includes(statusFilter.toLowerCase())) {
-          return false;
-        }
-        if (dateRange?.from) {
-          const from = dateRange.from;
-          const to = dateRange.to || from;
-
-          const etd = f.etd ? parseISO(f.etd) : null;
-          const eta = f.eta ? parseISO(f.eta) : null;
-
-          const etdInRange = etd && etd >= from && etd <= to;
-          const etaInRange = eta && eta >= from && eta <= to;
-
-          if (!(etdInRange || etaInRange)) {
-            return false;
-          }
         }
       }
 
@@ -328,7 +336,7 @@ const ContainerTracking = () => {
       console.log("Response from N8N webhook:", response.data);
       toast.success("Actualización solicitada correctamente");
       // Opcional: recargar datos para ver si cambió algo inmediatamente (aunque suele ser asíncrono)
-      // fetchData(); 
+      // fetchData();
     } catch (error) {
       console.error("Error sending container number to N8N:", error);
       toast.error("Error al solicitar actualización");
@@ -336,6 +344,68 @@ const ContainerTracking = () => {
       setLoading(false);
     }
   };
+
+  // Inline editing handlers
+  const handleEdit = (row: any) => {
+    setEditingId(row.num_contenedor);
+    setEditedRow({ ...row }); // Create a shallow copy for editing
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>, key: string) => {
+    if (editedRow) {
+      setEditedRow({ ...editedRow, [key]: e.target.value });
+    }
+  };
+
+  const handleSelectChange = (value: string, key: string) => {
+    if (editedRow) {
+      setEditedRow({ ...editedRow, [key]: value });
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editedRow || !editingId) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("cnn_container_factura") // Assuming this is the table to update
+        .update({
+          titulo: editedRow.titulo,
+          proveedor: editedRow.proveedor,
+          contrato: editedRow.contrato,
+          despacho: editedRow.despacho,
+          factura: editedRow.factura,
+          naviera: editedRow.naviera,
+          estado: editedRow.estado,
+          // Add other editable fields here
+        })
+        .eq("num_contenedor", editingId);
+
+      if (error) {
+        console.error("Error updating row:", error);
+        toast.error("Error al guardar cambios: " + error.message);
+      } else {
+        toast.success("Cambios guardados correctamente");
+        fetchData(); // Re-fetch data to update the table
+      }
+    } catch (error) {
+      console.error("Error saving changes:", error);
+      toast.error("Error al guardar cambios.");
+    } finally {
+      setEditingId(null);
+      setEditedRow(null);
+      setLoading(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditingId(null);
+    setEditedRow(null);
+  };
+
+  const allPossibleStatuses = Array.from(new Set(facturas.map(f => f.estado))).filter(Boolean);
+
 
   return (
     <div className="p-6 min-h-screen bg-[#f6f7fa]">
@@ -372,33 +442,32 @@ const ContainerTracking = () => {
           </button>
         ))}
       </div>
-      {activeTab === 'Todos' && (
-        <div className="flex items-center gap-4 mb-4 p-4 bg-gray-50 rounded-md border">
-          <input
-            type="text"
-            placeholder="Filtrar por título..."
-            className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
-            value={titleFilter}
-            onChange={e => setTitleFilter(e.target.value)}
-          />
-          <input
-            type="text"
-            placeholder="Filtrar por estado..."
-            className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-          />
-          <DatePickerWithRange
-            date={dateRange}
-            setDate={setDateRange}
-          />
-          <Button variant="outline" onClick={() => {
-            setTitleFilter('');
-            setStatusFilter('');
-            setDateRange(undefined);
-          }}>Limpiar filtros</Button>
-        </div>
-      )}
+      {/* Filters are now always visible */}
+      <div className="flex items-center gap-4 mb-4 p-4 bg-gray-50 rounded-md border">
+        <input
+          type="text"
+          placeholder="Filtrar por título..."
+          className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+          value={titleFilter}
+          onChange={e => setTitleFilter(e.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="Filtrar por estado..."
+          className="border rounded px-3 py-2 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+        />
+        <DatePickerWithRange
+          date={dateRange}
+          setDate={setDateRange}
+        />
+        <Button variant="outline" onClick={() => {
+          setTitleFilter('');
+          setStatusFilter('');
+          setDateRange(undefined);
+        }}>Limpiar filtros</Button>
+      </div>
       <div className="rounded-md border bg-white">
         <Table>
           <TableHeader className="bg-[#f6f7fa]">
@@ -423,13 +492,16 @@ const ContainerTracking = () => {
               <TableHead className="text-[#6b7280] font-bold">
                 <button onClick={() => requestSort('estado')}>ESTADO{getSortIndicator('estado')}</button>
               </TableHead>
+              <TableHead className="text-[#6b7280] font-bold">
+                <button onClick={() => requestSort('last_event_created_at')}>ÚLTIMA ACTUALIZACIÓN{getSortIndicator('last_event_created_at')}</button>
+              </TableHead>
               <TableHead className="text-[#6b7280] font-bold">ACCIÓN</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {loading && !editingId ? ( // Show loading only if not editing
               <TableRow>
-                <TableCell colSpan={13} className="text-center">
+                <TableCell colSpan={14} className="text-center">
                   <div className="flex justify-center items-center">
                     <div className="loader border-t-4 border-blue-500 rounded-full w-8 h-8 animate-spin"></div>
                     <span className="ml-2 text-blue-500">Cargando...</span>
@@ -439,6 +511,7 @@ const ContainerTracking = () => {
             ) : (
               paginatedFacturas.map((row) => {
                 const { progress, elapsed, total, isError } = calculateProgress(row.etd, row.eta);
+                const isEditing = editingId === row.num_contenedor;
 
                 // Calcular si el botón debe estar deshabilitado
                 const lastUpdate = row.last_event_created_at;
@@ -459,10 +532,50 @@ const ContainerTracking = () => {
                 return (
                   <TableRow key={row.num_contenedor} className={contractColorMap.get(row.num_contenedor)}>
                     <TableCell><input type="checkbox" /></TableCell>
-                    <TableCell>{row.titulo}</TableCell>
-                    <TableCell>{row.proveedor}</TableCell>
-                    <TableCell>{row.contrato}</TableCell>
-                    <TableCell>{row.despacho}</TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input
+                          value={editedRow?.titulo || ''}
+                          onChange={(e) => handleChange(e, 'titulo')}
+                          className="w-full"
+                        />
+                      ) : (
+                        row.titulo
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input
+                          value={editedRow?.proveedor || ''}
+                          onChange={(e) => handleChange(e, 'proveedor')}
+                          className="w-full"
+                        />
+                      ) : (
+                        row.proveedor
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input
+                          value={editedRow?.contrato || ''}
+                          onChange={(e) => handleChange(e, 'contrato')}
+                          className="w-full"
+                        />
+                      ) : (
+                        row.contrato
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input
+                          value={editedRow?.despacho || ''}
+                          onChange={(e) => handleChange(e, 'despacho')}
+                          className="w-full"
+                        />
+                      ) : (
+                        row.despacho
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div
                         className="font-medium text-[#222] cursor-pointer hover:underline"
@@ -477,32 +590,106 @@ const ContainerTracking = () => {
                     <TableCell>
                       {!isError && <TransitProgressBar progress={progress} elapsedDays={elapsed} totalDays={total} />}
                     </TableCell>
-                    <TableCell>{row.factura}</TableCell>
-                    <TableCell>{row.naviera}</TableCell>
                     <TableCell>
-                      {row.entregado ? 'Entregado' : translateStatus(row.estado)}
+                      {isEditing ? (
+                        <Input
+                          value={editedRow?.factura || ''}
+                          onChange={(e) => handleChange(e, 'factura')}
+                          className="w-full"
+                        />
+                      ) : (
+                        row.factura
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input
+                          value={editedRow?.naviera || ''}
+                          onChange={(e) => handleChange(e, 'naviera')}
+                          className="w-full"
+                        />
+                      ) : (
+                        row.naviera
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Select
+                          value={editedRow?.estado || ''}
+                          onValueChange={(value) => handleSelectChange(value, 'estado')}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Seleccionar estado" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allPossibleStatuses.map((status: string) => (
+                              <SelectItem key={status} value={status}>
+                                {translateStatus(status)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        row.entregado ? 'Entregado' : translateStatus(row.estado)
+                      )}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {row.last_event_created_at
+                        ? format(new Date(row.last_event_created_at), 'yyyy-MM-dd HH:mm')
+                        : '-'}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <button
-                          title="Ver detalle"
-                          onClick={() => handleViewDetail(row.num_contenedor)}
-                          className="hover:bg-gray-100 rounded-full p-1"
-                        >
-                          <Eye className="h-4 w-4 text-blue-600" />
-                        </button>
-                        <button
-                          title={tooltipText}
-                          onClick={() => handleUpdateTracking(row.num_contenedor, row.last_event_created_at)}
-                          disabled={isUpdateDisabled}
-                          className={`rounded-full p-1 ${isUpdateDisabled
-                              ? 'opacity-40 cursor-not-allowed'
-                              : 'hover:bg-gray-100 cursor-pointer'
-                            }`}
-                        >
-                          <RefreshCw className={`h-4 w-4 ${isUpdateDisabled ? 'text-gray-400' : 'text-green-600'
-                            } ${loading ? 'animate-spin' : ''}`} />
-                        </button>
+                        {isEditing ? (
+                          <>
+                            <button
+                              title="Guardar cambios"
+                              onClick={handleSave}
+                              className="hover:bg-gray-100 rounded-full p-1"
+                              disabled={loading}
+                            >
+                              <Save className="h-4 w-4 text-green-600" />
+                            </button>
+                            <button
+                              title="Cancelar edición"
+                              onClick={handleCancel}
+                              className="hover:bg-gray-100 rounded-full p-1"
+                              disabled={loading}
+                            >
+                              <X className="h-4 w-4 text-red-600" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              title="Ver detalle"
+                              onClick={() => handleViewDetail(row.num_contenedor)}
+                              className="hover:bg-gray-100 rounded-full p-1"
+                            >
+                              <Eye className="h-4 w-4 text-blue-600" />
+                            </button>
+                            <button
+                              title="Editar fila"
+                              onClick={() => handleEdit(row)}
+                              className="hover:bg-gray-100 rounded-full p-1"
+                              disabled={editingId !== null} // Disable edit if another row is being edited
+                            >
+                              <Edit className={`h-4 w-4 ${editingId !== null ? 'text-gray-400' : 'text-purple-600'}`} />
+                            </button>
+                            <button
+                              title={tooltipText}
+                              onClick={() => handleUpdateTracking(row.num_contenedor, row.last_event_created_at)}
+                              disabled={isUpdateDisabled || editingId !== null}
+                              className={`rounded-full p-1 ${isUpdateDisabled || editingId !== null
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-gray-100 cursor-pointer'
+                                }`}
+                            >
+                              <RefreshCw className={`h-4 w-4 ${isUpdateDisabled || editingId !== null ? 'text-gray-400' : 'text-green-600'
+                                } ${loading ? 'animate-spin' : ''}`} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

@@ -21,12 +21,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search } from 'lucide-react';
+import { Search, Edit2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 type CorreoRow = {
   id: number;
   titulo?: string | null;
+  hilaza?: string | null;
   proveedor?: string | null;
   contrato?: string | null;
   despacho?: string | null;
@@ -40,11 +43,13 @@ type CorreoRow = {
   eta?: string | null;
   created_at?: string | null;
   container_info_id?: string | null;
+  count?: string | null;
 };
 
 const fakeData: CorreoRow[] = Array.from({ length: 12 }).map((_, i) => ({
   id: i + 1,
   titulo: `16/1 RIZO ${i + 1}`,
+  hilaza: `HILAZA-${i % 3 + 1}`,
   proveedor: `Gurulaxmi ${((i % 4) + 1)}`,
   contrato: `EXP/PI-250500${i}`,
   despacho: 'Despacho Junio',
@@ -61,6 +66,7 @@ const fakeData: CorreoRow[] = Array.from({ length: 12 }).map((_, i) => ({
 
 const columns = [
   { key: 'titulo', label: 'TÍTULO' },
+
   { key: 'proveedor', label: 'PROVEEDOR' },
   { key: 'contrato', label: 'CONTRATO' },
   { key: 'contenedor', label: 'CONTENEDOR' },
@@ -80,6 +86,10 @@ const ApprovalQueue = () => {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<CorreoRow | null>(null);
   const [approving, setApproving] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<CorreoRow | null>(null);
+  const [editedData, setEditedData] = useState<Partial<CorreoRow>>({});
+  const [saving, setSaving] = useState(false);
   const pageSize = 6;
 
   const fetchData = useCallback(async () => {
@@ -114,6 +124,7 @@ const ApprovalQueue = () => {
     return rows.filter(r =>
       (r.num_contenedor || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.titulo || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (r.hilaza || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.naviera || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.contrato || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.proveedor || '').toString().toLowerCase().includes(searchTerm.toLowerCase())
@@ -146,6 +157,7 @@ const ApprovalQueue = () => {
       // 3. Insert in cnn_factura_tracking
       await supabase.from('cnn_factura_tracking').insert({
         titulo: selectedRow.titulo || null,
+        hilaza: selectedRow.hilaza || null,
         proveedor: selectedRow.proveedor || null,
         contrato: selectedRow.contrato || null,
         despacho: selectedRow.despacho || null,
@@ -191,6 +203,68 @@ const ApprovalQueue = () => {
     }
   };
 
+  const handleEdit = (row: CorreoRow) => {
+    setEditingRow(row);
+    // Map count to titulo if count exists, effectively merging them for the edit view
+    const dataToEdit = { ...row };
+    if (dataToEdit.count) {
+      dataToEdit.titulo = dataToEdit.count;
+    }
+    setEditedData(dataToEdit);
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRow) return;
+    setSaving(true);
+    try {
+      // Preparar datos para actualizar
+      const updateData: any = { ...editedData };
+
+      // Si estamos actualizando el título, asegurarnos de que 'count' no interfiera
+      // ya que la tabla prefiere 'count'. Lo seteamos a null para que se use 'titulo'.
+      updateData.count = null;
+
+      // Convertir fechas a formato correcto si están presentes
+      if (updateData.etd) {
+        updateData.etd = updateData.etd instanceof Date
+          ? updateData.etd.toISOString().split('T')[0]
+          : updateData.etd.split('T')[0];
+      }
+      if (updateData.eta) {
+        updateData.eta = updateData.eta instanceof Date
+          ? updateData.eta.toISOString().split('T')[0]
+          : updateData.eta.split('T')[0];
+      }
+      if (updateData.llegada_bquilla) {
+        updateData.llegada_bquilla = updateData.llegada_bquilla instanceof Date
+          ? updateData.llegada_bquilla.toISOString().split('T')[0]
+          : updateData.llegada_bquilla.split('T')[0];
+      }
+
+      // Actualizar en la base de datos
+      const { error } = await supabase
+        .from('cnn_correo_tracking')
+        .update(updateData)
+        .eq('id', editingRow.id);
+
+      if (error) throw error;
+
+      // Actualizar el estado local
+      setRows(prev => prev.map(r => r.id === editingRow.id ? { ...r, ...updateData } as CorreoRow : r));
+
+      toast({ title: 'Actualizado', description: 'Los datos se han actualizado correctamente' });
+      setEditDialogOpen(false);
+      setEditingRow(null);
+      setEditedData({});
+    } catch (e) {
+      console.error('Error updating row:', e);
+      toast({ title: 'Error', description: 'Ocurrió un error al actualizar', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4 p-6 h-[calc(100vh-4rem)] overflow-hidden">
       <div className="flex justify-between items-center">
@@ -228,8 +302,11 @@ const ApprovalQueue = () => {
                 <TableRow key={row.id} className="hover:bg-muted/50 text-sm">
                   <TableCell><Checkbox /></TableCell>
 
-                  {/* TÍTULO */}
-                  <TableCell className="font-medium">{row.titulo}</TableCell>
+                  {/* TÍTULO - Muestra el campo count */}
+                  <TableCell className="font-medium">{row.count || row.titulo || '-'}</TableCell>
+
+                  {/* HILAZA */}
+
 
                   {/* PROVEEDOR */}
                   <TableCell>{row.proveedor}</TableCell>
@@ -279,6 +356,14 @@ const ApprovalQueue = () => {
                   {/* ACCIÓN */}
                   <TableCell>
                     <div className="flex gap-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => handleEdit(row)}>
+                            <Edit2 className="h-4 w-4 text-blue-600" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Editar datos</p></TooltipContent>
+                      </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button size="sm" variant="ghost" className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleReject(row)}>
@@ -332,6 +417,131 @@ const ApprovalQueue = () => {
             <Button variant="outline" onClick={() => setConfirmDialogOpen(false)} disabled={approving}>Cancelar</Button>
             <Button onClick={handleApprove} disabled={approving} className="bg-slate-900 text-white">
               {approving ? 'Aprobando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Edición */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Datos</DialogTitle>
+            <DialogDescription>
+              Modifica los datos que desees actualizar
+            </DialogDescription>
+          </DialogHeader>
+          {editingRow && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="titulo">Título</Label>
+                  <Input
+                    id="titulo"
+                    value={editedData.titulo || ''}
+                    onChange={(e) => setEditedData({ ...editedData, titulo: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="proveedor">Proveedor</Label>
+                  <Input
+                    id="proveedor"
+                    value={editedData.proveedor || ''}
+                    onChange={(e) => setEditedData({ ...editedData, proveedor: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="contrato">Contrato</Label>
+                  <Input
+                    id="contrato"
+                    value={editedData.contrato || ''}
+                    onChange={(e) => setEditedData({ ...editedData, contrato: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="despacho">Despacho</Label>
+                  <Input
+                    id="despacho"
+                    value={editedData.despacho || ''}
+                    onChange={(e) => setEditedData({ ...editedData, despacho: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="num_contenedor">Número de Contenedor</Label>
+                  <Input
+                    id="num_contenedor"
+                    value={editedData.num_contenedor || ''}
+                    onChange={(e) => setEditedData({ ...editedData, num_contenedor: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="container_info_id">Container Info ID</Label>
+                  <Input
+                    id="container_info_id"
+                    value={editedData.container_info_id || ''}
+                    onChange={(e) => setEditedData({ ...editedData, container_info_id: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="naviera">Naviera</Label>
+                  <Input
+                    id="naviera"
+                    value={editedData.naviera || ''}
+                    onChange={(e) => setEditedData({ ...editedData, naviera: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="factura">Factura</Label>
+                  <Input
+                    id="factura"
+                    value={editedData.factura || ''}
+                    onChange={(e) => setEditedData({ ...editedData, factura: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="estado">Estado</Label>
+                  <Input
+                    id="estado"
+                    value={editedData.estado || ''}
+                    onChange={(e) => setEditedData({ ...editedData, estado: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="etd">ETD</Label>
+                  <Input
+                    id="etd"
+                    type="date"
+                    value={editedData.etd ? (typeof editedData.etd === 'string' ? editedData.etd.split('T')[0] : new Date(editedData.etd).toISOString().split('T')[0]) : ''}
+                    onChange={(e) => setEditedData({ ...editedData, etd: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="eta">ETA</Label>
+                  <Input
+                    id="eta"
+                    type="date"
+                    value={editedData.eta ? (typeof editedData.eta === 'string' ? editedData.eta.split('T')[0] : new Date(editedData.eta).toISOString().split('T')[0]) : ''}
+                    onChange={(e) => setEditedData({ ...editedData, eta: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llegada_bquilla">Llegada a Barranquilla</Label>
+                  <Input
+                    id="llegada_bquilla"
+                    type="date"
+                    value={editedData.llegada_bquilla ? (typeof editedData.llegada_bquilla === 'string' ? editedData.llegada_bquilla.split('T')[0] : new Date(editedData.llegada_bquilla).toISOString().split('T')[0]) : ''}
+                    onChange={(e) => setEditedData({ ...editedData, llegada_bquilla: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditDialogOpen(false); setEditingRow(null); setEditedData({}); }} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={saving} className="bg-slate-900 text-white">
+              {saving ? 'Guardando...' : 'Guardar'}
             </Button>
           </DialogFooter>
         </DialogContent>
