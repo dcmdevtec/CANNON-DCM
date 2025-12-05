@@ -8,18 +8,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Upload, RefreshCw, Eye, Edit, Save, X } from 'lucide-react'; // Added Edit, Save, X icons
+import { Upload, RefreshCw, Eye, Edit, Save, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { DatePickerWithRange } from "@/components/ui/date-picker-with-range";
 import { parseISO, differenceInDays, format, differenceInHours } from 'date-fns';
 import { DateRange } from "react-day-picker";
 import TransitProgressBar from "@/components/TransitProgressBar";
-import axios from "axios"; // Import axios for making HTTP requests
+import axios from "axios";
 import ExcelUploadModal from "@/components/ExcelUploadModal";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input"; // Import Input component
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Traducción de estados de tracking
 const statusTranslations: Record<string, string> = {
@@ -306,6 +306,13 @@ const ContainerTracking = () => {
     return sortConfig.direction === 'ascending' ? ' 🔼' : ' 🔽';
   };
 
+  const getSortIcon = (key: string) => {
+    if (sortConfig?.key === key) {
+      return sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+    }
+    return <ArrowUpDown className="h-3 w-3" />;
+  };
+
   // Función solo para navegar al detalle
   const handleViewDetail = (containerNumber: string) => {
     navigate(`/container-detail/${containerNumber}`);
@@ -369,7 +376,7 @@ const ContainerTracking = () => {
     setLoading(true);
     try {
       const { error } = await supabase
-        .from("cnn_factura_tracking") // Assuming this is the table to update
+        .from("cnn_factura_tracking") // Corrected table name
         .update({
           titulo: editedRow.titulo,
           proveedor: editedRow.proveedor,
@@ -480,13 +487,24 @@ const ContainerTracking = () => {
               <TableHead className="text-[#6b7280] font-bold">CONTRATO</TableHead>
               <TableHead className="text-[#6b7280] font-bold">DESPACHO</TableHead>
               <TableHead className="text-[#6b7280] font-bold">CONTENEDOR</TableHead>
-              <TableHead className="text-[#6b7280] font-bold">
-                <button onClick={() => requestSort('etd')}>ETD{getSortIndicator('etd')}</button>
+              <TableHead className="text-[#6b7280] font-bold cursor-pointer hover:bg-gray-100" onClick={() => requestSort('etd')}>
+                <div className="flex items-center gap-1">
+                  ETD
+                  {getSortIcon('etd')}
+                </div>
               </TableHead>
-              <TableHead className="text-[#6b7280] font-bold">
-                <button onClick={() => requestSort('eta')}>ETA{getSortIndicator('eta')}</button>
+              <TableHead className="text-[#6b7280] font-bold cursor-pointer hover:bg-gray-100" onClick={() => requestSort('eta')}>
+                <div className="flex items-center gap-1">
+                  ETA
+                  {getSortIcon('eta')}
+                </div>
               </TableHead>
-              <TableHead className="text-[#6b7280] font-bold">LLEGADA A BARRANQUILLA</TableHead>
+              <TableHead className="text-[#6b7280] font-bold cursor-pointer hover:bg-gray-100" onClick={() => requestSort('llegada_bquilla')}>
+                <div className="flex items-center gap-1">
+                  LLEGADA A BARRANQUILLA
+                  {getSortIcon('llegada_bquilla')}
+                </div>
+              </TableHead>
               <TableHead className="text-[#6b7280] font-bold">FACTURA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">NAVIERA</TableHead>
               <TableHead className="text-[#6b7280] font-bold">
