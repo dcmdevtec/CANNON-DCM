@@ -369,7 +369,7 @@ const ContainerTracking = () => {
     setLoading(true);
     try {
       const { error } = await supabase
-        .from("cnn_container_factura") // Assuming this is the table to update
+        .from("cnn_factura_tracking") // Assuming this is the table to update
         .update({
           titulo: editedRow.titulo,
           proveedor: editedRow.proveedor,
