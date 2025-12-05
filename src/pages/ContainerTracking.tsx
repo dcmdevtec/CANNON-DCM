@@ -718,7 +718,6 @@ const ContainerTracking = () => {
         onClose={() => setIsModalOpen(false)}
         onSuccess={() => {
           fetchData();
-          setIsModalOpen(false);
         }}
       />
     </div>
