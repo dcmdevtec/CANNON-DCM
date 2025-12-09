@@ -50,22 +50,29 @@ const ContainerDetail: React.FC = () => {
   console.log('tra desde API:', trackingData);
   const sortedEvents = Array.isArray(events)
     ? [...events]
-        .sort((a, b) => {
-          if (a.event_date && b.event_date) {
-            return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
-          }
-          if (a.event_date) return -1; // a tiene fecha, va antes
-          if (b.event_date) return 1;  // b tiene fecha, va antes
-          return 0;
-        })
+      .sort((a, b) => {
+        if (a.event_date && b.event_date) {
+          return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
+        }
+        if (a.event_date) return -1; // a tiene fecha, va antes
+        if (b.event_date) return 1;  // b tiene fecha, va antes
+        return 0;
+      })
     : [];
 
   // Usar solo los eventos originales, sin agregar manualmente el ETA destino
   const eventsWithETA = [...sortedEvents];
 
+  // Buscar el primer evento real (no ETA) en la línea de tiempo (que ya pasó)
+  const lastPastEvent = eventsWithETA.find(e => {
+    if (e.is_estimated) return false;
+    if (!e.event_date) return true; // Si no hay fecha, asumimos que es pasado (o data legacy)
+    return new Date(e.event_date) <= new Date();
+  });
+
   const getEventIcon = (event: any, isFirst: boolean, isLast: boolean, entregado?: boolean, esEventoEntrega?: boolean) => {
     const description = (event.event_description || event.event_type || '').toLowerCase();
-    const isFuture = event.isETA && new Date(event.event_date) > new Date();
+    const isFuture = event.is_estimated && new Date(event.event_date) > new Date();
 
     // Evento de llegada al destino y entregado: círculo verde animado, inner blanco
     if (entregado && esEventoEntrega) {
@@ -79,11 +86,11 @@ const ContainerDetail: React.FC = () => {
       );
     }
 
-// Animación personalizada para el círculo verde de entrega
-if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')) {
-  const style = document.createElement('style');
-  style.id = 'pulseGreenStyle';
-  style.innerHTML = `
+    // Animación personalizada para el círculo verde de entrega
+    if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')) {
+      const style = document.createElement('style');
+      style.id = 'pulseGreenStyle';
+      style.innerHTML = `
     @keyframes pulse-green {
       0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
       70% { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
@@ -93,17 +100,17 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
       animation: pulse-green 1.4s cubic-bezier(0.4,0,0.6,1) infinite;
     }
   `;
-  document.head.appendChild(style);
-}
+      document.head.appendChild(style);
+    }
 
     const eventDate = event.event_date ? new Date(event.event_date) : null;
     const today = new Date();
     const isPastEvent = eventDate ? eventDate <= today : true;
-    
+
     if (isFuture) return <Clock className="h-6 w-6 text-white" />;
-    if (event.isETA) return <CheckCircle className="h-6 w-6 text-white" />;
+    if (event.is_estimated) return <CheckCircle className="h-6 w-6 text-white" />;
     if (isFirst) return <div className="w-3 h-3 bg-white rounded-full animate-pulse" />;
-    
+
     // Si es un evento pasado, usar iconos naranjas
     if (isPastEvent) {
       if (description.includes('loaded') || description.includes('discharged') || description.includes('transshipment')) {
@@ -120,7 +127,7 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
       }
       return <Anchor className="h-5 w-5 text-orange-500" />;
     }
-    
+
     // Eventos no pasados mantienen sus colores originales
     if (description.includes('loaded') || description.includes('discharged') || description.includes('transshipment')) return <Ship className="h-5 w-5 text-orange-600" />;
     if (description.includes('received')) return <Package className="h-5 w-5 text-blue-600" />;
@@ -137,8 +144,8 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
     const location = (event.location || '').toLowerCase();
 
     // Eventos futuros
-    if (!isPastEvent && event.isETA) return 'border-blue-500 bg-blue-500 animate-pulse';
-    
+    if (!isPastEvent && event.is_estimated) return 'border-blue-500 bg-blue-500 animate-pulse';
+
     // Eventos pasados
     if (isPastEvent) {
       // Eventos de transbordo y carga/descarga
@@ -154,11 +161,11 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
     }
 
     // Eventos especiales
-    if (event.isETA) return 'border-green-500 bg-green-500';
+    if (event.is_estimated) return 'border-green-500 bg-green-500';
     if (isFirst) return 'border-blue-500 bg-blue-500';
     if (description.includes('received')) return 'border-blue-400 bg-blue-100';
     if (description.includes('empty')) return 'border-gray-400 bg-gray-100';
-    
+
     return 'border-gray-300 bg-white';
   };
 
@@ -166,7 +173,7 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
     <TooltipProvider>
       <div className="min-h-screen bg-gray-50">
         <div className="container mx-auto px-4 py-8 space-y-8">
-          
+
           <Card className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <Link to="/container-tracking" className="inline-flex items-center text-sm text-primary hover:text-primary/80 font-medium mb-4 transition-colors">
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -183,10 +190,8 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
               <div className="text-left sm:text-right">
                 <span className="text-xs text-muted-foreground font-medium">Último Movimiento</span>
                 {(() => {
-                  // Buscar el primer evento real (no ETA) en la línea de tiempo
-                  const ultimoEvento = eventsWithETA.find(e => !e.isETA);
-                  const lugar = ultimoEvento?.location || '-';
-                  const descripcion = ultimoEvento?.event_description || ultimoEvento?.event_type || tracking.latest_move || 'Empty to Shipper';
+                  const lugar = lastPastEvent?.location || '-';
+                  const descripcion = lastPastEvent?.event_description || lastPastEvent?.event_type || tracking.latest_move || 'Empty to Shipper';
                   return (
                     <>
                       <div className="font-bold text-lg text-gray-900 flex items-center gap-1 justify-end">
@@ -221,7 +226,7 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                       const isMapVisible = activeMapEventId === eventKey;
                       const isFirst = idx === 0;
                       const isLast = idx === eventsWithETA.length - 1;
-                      
+
                       let countryCode = '';
                       let locationDisplay = event.location || '';
                       if (event.location) {
@@ -232,7 +237,7 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                           locationDisplay = parts.slice(0, -1).join(',').trim();
                         }
                       }
-                      
+
                       // Si es el evento ETA destino, mostrar la fecha formateada igual que los otros eventos
                       let dateStr = '-';
                       if (event.id === 'eta-destination' && tracking?.pod_eta_date) {
@@ -261,8 +266,8 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                       if (event.event_date) {
                         const eventDate = new Date(event.event_date);
                         const today = new Date();
-                        eventDate.setHours(0,0,0,0);
-                        today.setHours(0,0,0,0);
+                        eventDate.setHours(0, 0, 0, 0);
+                        today.setHours(0, 0, 0, 0);
                         isFutureEvent = eventDate > today;
                       }
                       // Determinar si el evento es de llegada al destino
@@ -278,8 +283,8 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                           if (!ev.event_date) return false;
                           const eventDate = new Date(ev.event_date);
                           const today = new Date();
-                          eventDate.setHours(0,0,0,0);
-                          today.setHours(0,0,0,0);
+                          eventDate.setHours(0, 0, 0, 0);
+                          today.setHours(0, 0, 0, 0);
                           return eventDate <= today;
                         });
                         if (eventosDestino.length > 0) {
@@ -290,10 +295,10 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                       const eventDate = event.event_date ? new Date(event.event_date) : null;
                       const today = new Date();
                       const isPastEvent = eventDate ? eventDate <= today : true; // Si no hay fecha, asumimos que ya pasó
-                      
+
                       // Si es evento pasado, o es llegada al destino y fue entregado, mostrarlo colorido
                       const canShowLocation = isPastEvent || (entregado && esEventoEntrega);
-                      
+
                       // Estilos negativos solo para eventos futuros
                       const negativeStyle = (!canShowLocation) ? 'opacity-60 grayscale' : '';
                       const negativeText = (!canShowLocation && !(entregado && esEventoEntrega)) ? 'text-gray-400' : '';
@@ -394,8 +399,8 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                           if (!ev.event_date) return false;
                           const eventDate = new Date(ev.event_date);
                           const today = new Date();
-                          eventDate.setHours(0,0,0,0);
-                          today.setHours(0,0,0,0);
+                          eventDate.setHours(0, 0, 0, 0);
+                          today.setHours(0, 0, 0, 0);
                           return eventDate <= today;
                         });
                         if (eventosDestino.length > 0) {
@@ -403,7 +408,7 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                         }
                       }
                       if (entregado) {
-                        return <Badge style={{backgroundColor: '#10b981', color: 'white', border: 'none'}}>Entregado</Badge>;
+                        return <Badge style={{ backgroundColor: '#10b981', color: 'white', border: 'none' }}>Entregado</Badge>;
                       }
                       return <Badge>{tracking?.current_status || 'Vacío'}</Badge>;
                     })()}
@@ -427,7 +432,7 @@ if (typeof window !== 'undefined' && !document.getElementById('pulseGreenStyle')
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">Último evento:</span>
-                    <span className="font-medium text-gray-800">{summary?.last_event_date || '2025-09-08'}</span>
+                    <span className="font-medium text-gray-800">{lastPastEvent?.event_date || summary?.last_event_date || '2025-09-08'}</span>
                   </div>
                   <div className="border-t my-2" />
                   <div className="flex justify-between items-center">

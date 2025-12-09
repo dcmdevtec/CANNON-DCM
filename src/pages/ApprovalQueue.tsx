@@ -106,6 +106,7 @@ const ApprovalQueue = () => {
       } else if (!data || data.length === 0) {
         setRows(fakeData);
       } else {
+        console.log('Fetched data:', data);
         setRows(data as CorreoRow[]);
       }
     } catch (e) {
@@ -155,15 +156,23 @@ const ApprovalQueue = () => {
       }
 
       // 3. Insert in cnn_factura_tracking
-      await supabase.from('cnn_factura_tracking').insert({
+      // SWAPPED MAPPING based on user feedback
+      const realContainerNumber = selectedRow.contenedor || selectedRow.container_info_id;
+
+      if (!realContainerNumber) {
+        toast({ title: 'Error', description: 'No se encontró el número de contenedor.', variant: 'destructive' });
+        setConfirmDialogOpen(false);
+        return;
+      }
+
+      const record = {
         titulo: selectedRow.titulo || null,
-        hilaza: selectedRow.hilaza || null,
         proveedor: selectedRow.proveedor || null,
         contrato: selectedRow.contrato || null,
         despacho: selectedRow.despacho || null,
-        num_contenedor: selectedRow.container_info_id || null,
+        num_contenedor: selectedRow.num_contenedor || null, // Sequence (1 de 3)
         llegada_bquilla: selectedRow.llegada_bquilla ? new Date(selectedRow.llegada_bquilla).toISOString().split('T')[0] : null,
-        contenedor: selectedRow.num_contenedor || null,
+        contenedor: realContainerNumber, // Actual Container Number
         estado: 'Aprobado',
         naviera: selectedRow.naviera || null,
         factura: selectedRow.factura || null,
@@ -171,14 +180,34 @@ const ApprovalQueue = () => {
         eta: etaDate ? etaDate.toISOString().split('T')[0] : null,
         dias_transito: diasTransito,
         container_info_id: null,
-      });
+      };
+
+      const { error: insertError } = await supabase.from('cnn_factura_tracking').insert(record);
+      if (insertError) throw insertError;
 
       // 4. Insert/check in cnn_container_tracking
-      const containerNumber = selectedRow.container_info_id;
+      // Use the Real Container Number (now in record.contenedor)
+      const containerNumber = record.contenedor;
       if (containerNumber) {
-        const { data: existing } = await supabase.from('cnn_container_tracking').select('id').eq('container_number', containerNumber).single();
+        const { data: existing, error: selectError } = await supabase
+          .from('cnn_container_tracking')
+          .select('id')
+          .eq('container_number', containerNumber)
+          .single();
+
+        if (selectError && selectError.code !== 'PGRST116') {
+          console.error('Error checking container existence:', selectError);
+        }
+
         if (!existing) {
-          await supabase.from('cnn_container_tracking').insert([{ container_number: containerNumber }]);
+          const { error: containerError } = await supabase
+            .from('cnn_container_tracking')
+            .insert([{ container_number: containerNumber }]);
+
+          if (containerError) {
+            console.error('Error inserting container:', containerError);
+            // We don't block the flow here, but log it
+          }
         }
       }
 
@@ -317,7 +346,8 @@ const ApprovalQueue = () => {
                   {/* CONTENEDOR */}
                   <TableCell>
                     <div className="flex flex-col">
-                      <span className="font-bold text-gray-900">{row.container_info_id || '-'}</span>
+                      {/* Revertido a container_info_id para visualización si contenedor está vacío, pero manteniendo la lógica de inserción corregida */}
+                      <span className="font-bold text-gray-900">{row.contenedor || row.container_info_id || '-'}</span>
                       <span className="text-xs text-gray-500">{row.num_contenedor}</span>
                     </div>
                   </TableCell>
@@ -409,7 +439,7 @@ const ApprovalQueue = () => {
           </DialogHeader>
           {selectedRow && (
             <div className="grid gap-2 py-4 text-sm">
-              <div><strong>Contenedor:</strong> {selectedRow.container_info_id}</div>
+              <div><strong>Contenedor:</strong> {selectedRow.contenedor || selectedRow.container_info_id}</div>
               <div><strong>Contrato:</strong> {selectedRow.contrato}</div>
             </div>
           )}
