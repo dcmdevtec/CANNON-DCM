@@ -168,13 +168,13 @@ const ApprovalQueue = () => {
       }
 
       const record = {
-        titulo: selectedRow.titulo || null,
+        titulo: selectedRow.count || selectedRow.titulo || null,
         proveedor: selectedRow.proveedor || null,
         contrato: selectedRow.contrato || null,
         despacho: selectedRow.despacho || null,
-        num_contenedor: selectedRow.num_contenedor || null, // Sequence (1 de 3)
+        num_contenedor: realContainerNumber, // Actual Container Number
         llegada_bquilla: selectedRow.llegada_bquilla ? new Date(selectedRow.llegada_bquilla).toISOString().split('T')[0] : null,
-        contenedor: realContainerNumber, // Actual Container Number
+        contenedor: selectedRow.num_contenedor || null, // Sequence (1 de 3)
         estado: 'Aprobado',
         naviera: selectedRow.naviera || null,
         factura: selectedRow.factura || null,
@@ -188,8 +188,8 @@ const ApprovalQueue = () => {
       if (insertError) throw insertError;
 
       // 4. Insert/check in cnn_container_tracking
-      // Use the Real Container Number (now in record.contenedor)
-      const containerNumber = record.contenedor;
+      // Use the Real Container Number (now in record.num_contenedor)
+      const containerNumber = record.num_contenedor;
       if (containerNumber) {
         const { data: existing, error: selectError } = await supabase
           .from('cnn_container_tracking')
