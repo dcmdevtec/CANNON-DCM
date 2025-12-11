@@ -69,6 +69,8 @@ const columns = [
 
   { key: 'proveedor', label: 'PROVEEDOR' },
   { key: 'contrato', label: 'CONTRATO' },
+  { key: 'despacho', label: 'DESPACHO' },
+  { key: 'factura', label: 'FACTURA' },
   { key: 'contenedor', label: 'CONTENEDOR' },
   { key: 'etd', label: 'ETD' },
   { key: 'eta', label: 'ETA' },
@@ -296,12 +298,12 @@ const ApprovalQueue = () => {
 
   return (
     <div className="space-y-4 p-6 h-[calc(100vh-4rem)] overflow-hidden">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <h1 className="text-2xl font-bold">Módulo de Aprobaciones</h1>
-        <div className="flex items-center gap-4">
+        <div className="w-full md:w-72">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por contenedor, contrato, etc..." className="w-72 pl-9" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }} />
+            <Input placeholder="Buscar por contenedor, contrato, etc..." className="w-full pl-9" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }} />
           </div>
         </div>
       </div>
@@ -342,6 +344,12 @@ const ApprovalQueue = () => {
 
                   {/* CONTRATO */}
                   <TableCell>{row.contrato || '-'}</TableCell>
+
+                  {/* DESPACHO */}
+                  <TableCell>{row.despacho || '-'}</TableCell>
+
+                  {/* FACTURA */}
+                  <TableCell>{row.factura || '-'}</TableCell>
 
                   {/* CONTENEDOR */}
                   <TableCell>

@@ -70,25 +70,15 @@ const ContainerDetail: React.FC = () => {
     return new Date(e.event_date) <= new Date();
   });
 
-  // Buscar el evento "Estimated Time of Arrival" para usar su fecha como POD ETA
-  const etaEvent = eventsWithETA.find(e =>
-    (e.event_description || e.event_type || '').toLowerCase().includes('estimated time of arrival')
-  );
-
-  let displayPodEta = tracking.pod_eta_date || '2025-09-24';
-
-  // Priorizar la fecha del evento si existe
-  if (etaEvent && etaEvent.event_date) {
+  let displayPodEta = 'N/A';
+  // Tomar siempre el POD ETA desde el registro de tracking
+  if (tracking.pod_eta_date) {
     try {
-      displayPodEta = format(parseISO(etaEvent.event_date), "dd MMM yyyy", { locale: es });
+      displayPodEta = format(parseISO(tracking.pod_eta_date), "dd-MM-yyyy", { locale: es });
     } catch (e) {
-      displayPodEta = etaEvent.event_date;
+      // Si falla el parseo, mostrar la fecha original
+      displayPodEta = tracking.pod_eta_date;
     }
-  } else if (tracking.pod_eta_date) {
-    // Si no hay evento, intentar formatear la fecha del tracking
-    try {
-      displayPodEta = format(parseISO(tracking.pod_eta_date), "dd MMM yyyy", { locale: es });
-    } catch (e) { }
   }
 
   const getEventIcon = (event: any, isFirst: boolean, isLast: boolean, entregado?: boolean, esEventoEntrega?: boolean) => {
