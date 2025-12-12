@@ -197,7 +197,7 @@ const ApprovalQueue = () => {
         }
       }
 
-      setRows(prev => prev.filter(r => r.id !== selectedRow.id));
+      setRows(prev => prev.map(r => r.id === selectedRow.id ? { ...r, estado: 'Aprobado' } : r));
       toast({ title: 'Aprobado', description: 'La solicitud ha sido aprobada exitosamente' });
       setConfirmDialogOpen(false);
       setSelectedRow(null);
