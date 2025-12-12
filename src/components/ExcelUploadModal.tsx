@@ -41,7 +41,7 @@ type ValidationError = {
 };
 type UploadResult = {
   rowIndex: number;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'duplicate';
   message?: string;
   data?: ExcelRow;
 };
@@ -199,6 +199,30 @@ const ExcelUploadModal = ({ open, onClose, onSuccess }: { open: boolean; onClose
           dias_transito: row["Dias de transito"] || row["DIAS_TRANSITO"],
         };
 
+        // Check for duplicates in cnn_factura_tracking
+        let duplicateQuery = supabase
+          .from("cnn_factura_tracking")
+          .select("id")
+          .eq("num_contenedor", record.num_contenedor);
+
+        if (record.etd) {
+          duplicateQuery = duplicateQuery.eq("etd", record.etd);
+        }
+        if (record.contrato) {
+          duplicateQuery = duplicateQuery.eq("contrato", record.contrato);
+        }
+
+        const { data: existingDuplicate, error: duplicateError } = await duplicateQuery.maybeSingle();
+
+        if (duplicateError) {
+          throw new Error(`Error al verificar duplicados: ${duplicateError.message}`);
+        }
+
+        if (existingDuplicate) {
+          results.push({ rowIndex, status: 'duplicate', message: "Registro duplicado omitido (ya existe contenedor con mismo ETD/Contrato).", data: row });
+          continue;
+        }
+
         // Insert into cnn_factura_tracking
         const { error: facturaError } = await supabase.from("cnn_factura_tracking").insert([record]);
         if (facturaError) {
@@ -265,6 +289,7 @@ const ExcelUploadModal = ({ open, onClose, onSuccess }: { open: boolean; onClose
   const totalRows = excelData.length;
   const successCount = uploadResults.filter(r => r.status === 'success').length;
   const errorCount = uploadResults.filter(r => r.status === 'error').length;
+  const duplicateCount = uploadResults.filter(r => r.status === 'duplicate').length;
 
   const renderContent = () => {
     switch (step) {
@@ -458,6 +483,11 @@ const ExcelUploadModal = ({ open, onClose, onSuccess }: { open: boolean; onClose
                   <span className="text-lg font-bold">{errorCount}</span>
                   <span className="text-sm text-gray-600">Errores</span>
                 </div>
+                <div className="flex flex-col items-center">
+                  <AlertCircle className="h-6 w-6 text-yellow-500" />
+                  <span className="text-lg font-bold">{duplicateCount}</span>
+                  <span className="text-sm text-gray-600">Duplicados</span>
+                </div>
               </div>
 
               {successCount > 0 && (
@@ -468,6 +498,20 @@ const ExcelUploadModal = ({ open, onClose, onSuccess }: { open: boolean; onClose
                       <CheckCircle className="h-3 w-3 mt-1 flex-shrink-0" />
                       <span>
                         Fila {res.rowIndex}: Contenedor '{res.data?.["# Contenedor"] || res.data?.["CONTENEDOR"] || res.data?.["NUM_CONTENEDOR"]}' cargado exitosamente.
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {duplicateCount > 0 && (
+                <div className="max-h-[200px] overflow-auto border rounded-md p-2 bg-yellow-50">
+                  <p className="text-sm font-medium text-yellow-700 mb-2">Duplicados omitidos:</p>
+                  {uploadResults.filter(r => r.status === 'duplicate').map((res, index) => (
+                    <div key={index} className="flex items-start gap-2 text-yellow-600 text-xs mb-1">
+                      <AlertCircle className="h-3 w-3 mt-1 flex-shrink-0" />
+                      <span>
+                        Fila {res.rowIndex}: Contenedor '{res.data?.["# Contenedor"] || res.data?.["CONTENEDOR"] || res.data?.["NUM_CONTENEDOR"]}' ya existe.
                       </span>
                     </div>
                   ))}
