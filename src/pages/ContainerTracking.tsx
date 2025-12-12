@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import * as XLSX from 'xlsx';
 import {
   Table,
   TableBody,
@@ -8,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Upload, RefreshCw, Eye, Edit, Save, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Upload, RefreshCw, Eye, Edit, Save, X, ArrowUpDown, ArrowUp, ArrowDown, Download } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { DatePickerWithRange } from "@/components/ui/date-picker-with-range";
@@ -316,6 +317,28 @@ const ContainerTracking = () => {
     return <ArrowUpDown className="h-3 w-3" />;
   };
 
+  const handleExportExcel = () => {
+    const dataToExport = filteredFacturas.map(row => ({
+      'TÍTULO': row.titulo,
+      'PROVEEDOR': row.proveedor,
+      'CONTRATO': row.contrato,
+      'DESPACHO': row.despacho,
+      'CONTENEDOR': row.num_contenedor,
+      'ETD': formatDate(row.etd),
+      'ETA': formatDate(row.eta),
+      'LLEGADA A BARRANQUILLA': row.llegada_bquilla ? formatDate(row.llegada_bquilla) : '-',
+      'FACTURA': row.factura,
+      'NAVIERA': row.naviera,
+      'ESTADO': row.entregado ? 'Entregado' : translateStatus(row.estado),
+      'ÚLTIMA ACTUALIZACIÓN': row.last_event_created_at ? format(new Date(row.last_event_created_at), 'yyyy-MM-dd HH:mm') : '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Contenedores");
+    XLSX.writeFile(wb, "Reporte_Contenedores.xlsx");
+  };
+
   // Función solo para navegar al detalle
   const handleViewDetail = (containerNumber: string) => {
     navigate(`/container-detail/${containerNumber}`);
@@ -425,6 +448,10 @@ const ContainerTracking = () => {
           <Button variant="outline" onClick={() => setIsModalOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Subir Excel
+          </Button>
+          <Button variant="outline" onClick={handleExportExcel}>
+            <Download className="mr-2 h-4 w-4" />
+            Exportar Excel
           </Button>
           <input
             type="text"
