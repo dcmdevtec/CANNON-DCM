@@ -46,23 +46,7 @@ type CorreoRow = {
   count?: string | null;
 };
 
-const fakeData: CorreoRow[] = Array.from({ length: 12 }).map((_, i) => ({
-  id: i + 1,
-  titulo: `16/1 RIZO ${i + 1}`,
-  hilaza: `HILAZA-${i % 3 + 1}`,
-  proveedor: `Gurulaxmi ${((i % 4) + 1)}`,
-  contrato: `EXP/PI-250500${i}`,
-  despacho: 'Despacho Junio',
-  num_contenedor: `${(i % 3) + 1} de 3`,
-  container_info_id: ['MSMU6181134', 'TGBU5843024', 'MSMU6351035', 'FFAU2236575'][i % 4],
-  estado: ['Pendiente', 'Entregado', 'En Tránsito'][i % 3],
-  naviera: ['MSC', 'MAERSK', 'CMA-CGM', 'HAMBURG'][i % 4],
-  factura: `F-${1000 + i}`,
-  llegada_bquilla: new Date(Date.now() - i * 86400000).toISOString(),
-  etd: new Date(Date.now() - (i + 30) * 86400000).toISOString(),
-  eta: new Date(Date.now() + (i + 10) * 86400000).toISOString(),
-  created_at: new Date().toISOString(),
-}));
+
 
 const columns = [
   { key: 'titulo', label: 'TÍTULO' },
@@ -104,16 +88,16 @@ const ApprovalQueue = () => {
 
       if (error) {
         console.error('Error fetching cnn_correo_tracking:', error);
-        setRows(fakeData);
+
       } else if (!data || data.length === 0) {
-        setRows(fakeData);
+
       } else {
         console.log('Fetched data:', data);
         setRows(data as CorreoRow[]);
       }
     } catch (e) {
       console.error(e);
-      setRows(fakeData);
+
     } finally {
       setLoading(false);
     }

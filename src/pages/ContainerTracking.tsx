@@ -159,9 +159,13 @@ const ContainerTracking = () => {
   }, []);
 
   // Mapeo de estado real a categoría de filtro
-  function getTabCategory(row: any): 'En Tránsito' | 'En Puerto' | 'Entregado' | 'Otros' {
+  function getTabCategory(row: any): 'En Tránsito' | 'Aprobados' | 'Entregado' | 'Otros' {
     if (row.entregado) return 'Entregado';
     const estado = row.estado || '';
+
+    // Si el estado es explícitamente "Aprobado", va a la pestaña Aprobados
+    if (estado === 'Aprobado') return 'Aprobados';
+
     const normalized = estado.toLowerCase();
     if (
       normalized.includes('tránsito') ||
@@ -174,14 +178,13 @@ const ContainerTracking = () => {
       normalized.includes('empty to shipper') ||
       normalized.includes('recibido para exportación')
     ) return 'En Tránsito';
-    if (
-      normalized.includes('puerto') ||
-      normalized.includes('port') ||
-      normalized.includes('llegó a puerto') ||
-      normalized.includes('arrived at port') ||
-      normalized.includes('descargado') ||
-      normalized.includes('discharged')
-    ) return 'En Puerto';
+
+    // La lógica de "En Puerto" se elimina o se integra si es necesario, 
+    // pero el usuario pidió cambiar el tab "Puerto" por "Aprobados".
+    // Si hay contenedores que antes caían en "En Puerto" y no son "Aprobado", 
+    // caerán en "Otros" o se pueden mapear a otra categoría si se desea.
+    // Por ahora, seguimos la instrucción de reemplazar el tab.
+
     return 'Otros';
   }
 
@@ -264,7 +267,7 @@ const ContainerTracking = () => {
 
   const counts = useMemo(() => ({
     'En Tránsito': facturas.filter(f => getTabCategory(f) === 'En Tránsito').length,
-    'En Puerto': facturas.filter(f => getTabCategory(f) === 'En Puerto').length,
+    'Aprobados': facturas.filter(f => getTabCategory(f) === 'Aprobados').length,
     'Entregado': facturas.filter(f => getTabCategory(f) === 'Entregado').length,
     'Todos': facturas.length
   }), [facturas]);
@@ -297,7 +300,7 @@ const ContainerTracking = () => {
     return map;
   }, [filteredFacturas]);
 
-  const estados = ['En Tránsito', 'En Puerto', 'Entregado'];
+  const estados = ['En Tránsito', 'Aprobados', 'Entregado'];
 
   const getSortIndicator = (key: string) => {
     if (!sortConfig || sortConfig.key !== key) {
