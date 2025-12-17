@@ -1,6 +1,6 @@
 import LoginForm from '@/components/LoginForm';
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/lib/useAuth';
 
 const LoginPage = () => {
@@ -32,6 +32,11 @@ const LoginPage = () => {
             <p className="text-sm text-muted-foreground">Introduce tus credenciales para continuar</p>
           </div>
           <LoginForm />
+          <div className="mt-4 text-center">
+            <Link to="/login-new" className="text-sm text-primary hover:underline">
+              Ir al nuevo login
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -13,6 +13,7 @@ import MaritimeDashboard from "./pages/MaritimeDashboard";
 import AdminPanel from "./pages/AdminPanel";
 import DatosApi from "./pages/DatosApi";
 import LoginPage from "./pages/LoginPage";
+import LoginNewPage from "./pages/LoginNewPage";
 import RequireAuth from "./lib/RequireAuth";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/login-new" element={<LoginNewPage />} />
           <Route element={<RequireAuth><Layout /></RequireAuth>}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/maritime-dashboard" element={<MaritimeDashboard />} />
