@@ -33,7 +33,7 @@ const App = () => (
             <Route path="/container-detail/:containerNumber" element={<ContainerDetail />} />
             <Route path="/container-tracking" element={<ContainerTracking />} />
             <Route path="/approval-queue" element={<ApprovalQueue />} />
-            <Route path="/admin" element={<AdminPanel />} />
+
             <Route path="/datos-api" element={<DatosApi />} />
           </Route>
           <Route path="*" element={<NotFound />} />

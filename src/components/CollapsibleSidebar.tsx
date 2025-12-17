@@ -40,78 +40,73 @@ const CollapsibleSidebar = () => {
 
   return (
     <aside
-  className={cn(
-    "relative bg-[#1a222c] text-white flex flex-col transition-all duration-300 ease-in-out",
-    isCollapsed ? "w-20" : "w-64"
-  )}
->
-  <div className="flex items-center justify-between h-16 px-6 border-b border-gray-700">
-    <div
       className={cn(
-        "flex items-center h-full",
-        isCollapsed && "justify-center w-full"
+        "relative bg-[#1a222c] text-white flex flex-col transition-all duration-300 ease-in-out",
+        isCollapsed ? "w-20" : "w-64"
       )}
     >
-      {isCollapsed ? (
-        // Logo solo cañón
-        <img
-          src="/lo.png"
-          alt="Cañón"
-      className="h-full w-auto transition-all duration-300"
-         
+      <div className="flex items-center justify-between h-16 px-6 border-b border-gray-700">
+        <div
+          className={cn(
+            "flex items-center h-full",
+            isCollapsed && "justify-center w-full"
+          )}
+        >
+          {isCollapsed ? (
+            // Logo solo cañón
+            <img
+              src="/lo.png"
+              alt="Cañón"
+              className="h-full w-auto transition-all duration-300"
+
+            />
+          ) : (
+            // Logo completo
+            <img
+              src="/logo.png"
+              alt="Cannon Logo"
+              className=" w-auto transition-all duration-300"
+            />
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={toggleSidebar}
+        className="absolute top-1/2 -right-3 z-10 bg-gray-700 text-white rounded-full p-1.5 focus:outline-none focus:ring-2 focus:ring-white"
+      >
+        <ChevronLeft
+          className={cn(
+            "h-4 w-4 transition-transform",
+            isCollapsed && "rotate-180"
+          )}
         />
-      ) : (
-        // Logo completo
-        <img
-          src="/logo.png"
-          alt="Cannon Logo"
-          className=" w-auto transition-all duration-300"
+      </button>
+
+      <nav className="flex-1 px-4 py-6 space-y-2">
+        <SidebarNavLink
+          to="/"
+          icon={<LayoutDashboard className="h-6 w-6" />}
+          label="Dashboard"
+          isCollapsed={isCollapsed}
         />
-      )}
-    </div>
-  </div>
 
-  <button
-    onClick={toggleSidebar}
-    className="absolute top-1/2 -right-3 z-10 bg-gray-700 text-white rounded-full p-1.5 focus:outline-none focus:ring-2 focus:ring-white"
-  >
-    <ChevronLeft
-      className={cn(
-        "h-4 w-4 transition-transform",
-        isCollapsed && "rotate-180"
-      )}
-    />
-  </button>
+        <SidebarNavLink
+          to="/container-tracking"
+          icon={<Anchor className="h-6 w-6" />}
+          label="Contenedores"
+          isCollapsed={isCollapsed}
+        />
+        <SidebarNavLink
+          to="/approval-queue"
+          icon={<MailCheck className="h-6 w-6" />}
+          label="Aprobaciones"
+          isCollapsed={isCollapsed}
+        />
 
-  <nav className="flex-1 px-4 py-6 space-y-2">
-    <SidebarNavLink
-      to="/"
-      icon={<LayoutDashboard className="h-6 w-6" />}
-      label="Dashboard"
-      isCollapsed={isCollapsed}
-    />
-   
-    <SidebarNavLink
-      to="/container-tracking"
-      icon={<Anchor className="h-6 w-6" />}
-      label="Contenedores"
-      isCollapsed={isCollapsed}
-    />
-    <SidebarNavLink
-      to="/approval-queue"
-      icon={<MailCheck className="h-6 w-6" />}
-      label="Aprobaciones"
-      isCollapsed={isCollapsed}
-    />
-    <SidebarNavLink
-      to="/admin"
-      icon={<Settings className="h-6 w-6" />}
-      label="Administración"
-      isCollapsed={isCollapsed}
-    />
-  </nav>
+      </nav>
 
-</aside>
+    </aside>
 
   );
 };
